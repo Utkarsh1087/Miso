@@ -1,0 +1,1491 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Riko Desktop Pet</title>
+  <link rel="icon" href="data:,">
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const isTransparent = urlParams.get('transparent') === 'true' || Boolean(window.pywebview);
+    if (isTransparent) {
+      document.documentElement.style.background = 'transparent';
+      document.documentElement.style.backgroundColor = 'transparent';
+      document.addEventListener('DOMContentLoaded', () => {
+        document.body.style.background = 'transparent';
+        document.body.style.backgroundColor = 'transparent';
+        document.body.classList.add('is-transparent');
+        const start = document.getElementById('start');
+        if (start) start.remove();
+        const cb = document.getElementById('controls-bar');
+        if (cb) cb.style.display = 'none';
+        const st = document.getElementById('status');
+        if (st) st.style.display = 'none';
+        const dh = document.getElementById('drag-header');
+        if (dh) dh.remove();
+      });
+    }
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      user-select: none;
+      background: transparent !important;
+      background-color: transparent !important;
+    }
+    body:not(.is-transparent) {
+      background: #f4f4f7 !important;
+      background-color: #f4f4f7 !important;
+    }
+    #drag-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 65px;
+      -webkit-app-region: drag;
+      z-index: 40;
+      cursor: grab;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 8px;
+    }
+    #drag-header:active {
+      cursor: grabbing;
+    }
+    .drag-handle-pill {
+      font-size: 11px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.95);
+      background: rgba(0, 0, 0, 0.65);
+      padding: 4px 14px;
+      border-radius: 14px;
+      letter-spacing: 0.5px;
+      pointer-events: none;
+      opacity: 0; /* Clean & invisible during idle so it never blocks your screen */
+      transition: opacity 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.2s;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+    }
+    #drag-header:hover .drag-handle-pill {
+      opacity: 1.0; /* Appears smoothly when hovering near the top to drag */
+      background: rgba(0, 0, 0, 0.85);
+    }
+    .floating-heart {
+      position: fixed;
+      pointer-events: none;
+      font-size: 24px;
+      user-select: none;
+      z-index: 200;
+      animation: floatUp 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+    @keyframes floatUp {
+      0% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(0.6);
+      }
+      50% {
+        transform: translate(-50%, -60px) scale(1.3);
+      }
+      100% {
+        opacity: 0;
+        transform: translate(-50%, -110px) scale(1.0);
+      }
+    }
+    canvas {
+      -webkit-app-region: no-drag;
+      cursor: pointer;
+    }
+    #controls-bar, .btn, button, input {
+      -webkit-app-region: no-drag;
+      position: relative;
+      z-index: 60;
+    }
+    #start {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 19px;
+      color: #222;
+      background: rgba(255, 255, 255, 0.88);
+      cursor: pointer;
+      z-index: 100;
+      backdrop-filter: blur(8px);
+      transition: opacity 0.3s;
+    }
+    #start span { font-size: 13px; color: #555; margin-top: 6px; }
+    #status {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      font-size: 12px;
+      color: #333;
+      background: rgba(255,255,255,0.85);
+      padding: 5px 12px;
+      border-radius: 20px;
+      pointer-events: none;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+      border: 1px solid rgba(0,0,0,0.08);
+      z-index: 50;
+    }
+    #controls-bar {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      display: flex;
+      gap: 8px;
+      z-index: 50;
+    }
+    .btn {
+      background: rgba(255,255,255,0.85);
+      border: 1px solid rgba(0,0,0,0.1);
+      border-radius: 20px;
+      padding: 5px 11px;
+      font-size: 11px;
+      cursor: pointer;
+      color: #333;
+      backdrop-filter: blur(8px);
+      transition: all 0.2s;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    .btn:hover { background: #fff; transform: translateY(-1px); }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.179.1/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.179.1/examples/jsm/",
+        "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.4.1/lib/three-vrm.module.min.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="drag-header" class="pywebview-drag-region" title="Drag anywhere here to move Riko">
+    <div class="drag-handle-pill">✥ Drag Window</div>
+  </div>
+  <div id="start">
+    <b>Click anywhere to start</b>
+    <span>Enables voice audio and interactive camera</span>
+  </div>
+  <div id="status">Connecting...</div>
+
+  <div id="controls-bar">
+    <button class="btn" id="btn-wardrobe" title="Switch Outfit / Avatar (or press 'W')">👗 Wardrobe</button>
+    <button class="btn" id="btn-theme" title="Switch Theme (or press 'T')">🎨 Stage</button>
+    <button class="btn" id="btn-reset" title="Recenter Camera (or press 'R')">🎯 Recenter</button>
+  </div>
+
+  <audio id="voice" crossorigin="anonymous"></audio>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+
+    const statusEl = document.getElementById('status');
+    const startOverlay = document.getElementById('start');
+    const voice = document.getElementById('voice');
+    const btnTheme = document.getElementById('btn-theme');
+    const btnWardrobe = document.getElementById('btn-wardrobe');
+    const btnReset = document.getElementById('btn-reset');
+    const controlsBar = document.getElementById('controls-bar');
+
+    // ── Web Audio & Viseme Phoneme Setup ──
+    let audioCtx = null;
+    let analyser = null;
+    let pannerNode = null;
+    let freqData = null;
+    let isStarted = isTransparent;
+
+    let currentEmotion = 'neutral';
+    const knownEmotions = ['happy', 'angry', 'sad', 'surprised', 'relaxed', 'jealous', 'flustered', 'smug', 'caring'];
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.3;
+        const source = audioCtx.createMediaElementSource(voice);
+        if (audioCtx.createStereoPanner) {
+          pannerNode = audioCtx.createStereoPanner();
+          source.connect(analyser);
+          analyser.connect(pannerNode);
+          pannerNode.connect(audioCtx.destination);
+        } else {
+          source.connect(analyser);
+          analyser.connect(audioCtx.destination);
+        }
+        freqData = new Uint8Array(analyser.frequencyBinCount);
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function updateSpatialAudio() {
+      if (!pannerNode || !audioCtx) return;
+      const screenWidth = window.screen.availWidth || window.screen.width || 1920;
+      const winCenterX = window.screenX + (window.innerWidth / 2);
+      // Pan from -0.85 (far left) to +0.85 (far right)
+      const panValue = Math.max(-0.85, Math.min(0.85, ((winCenterX / screenWidth) * 2 - 1) * 0.9));
+      pannerNode.pan.setTargetAtTime(panValue, audioCtx.currentTime, 0.1);
+    }
+
+    function activate() {
+      initAudio();
+      if (!isStarted) {
+        isStarted = true;
+        if (startOverlay) {
+          startOverlay.style.opacity = '0';
+          setTimeout(() => startOverlay.remove(), 300);
+        }
+        statusEl.textContent = '● Listening for Riko...';
+        setInterval(checkForVoice, 150);
+      }
+    }
+
+    if (isTransparent) {
+      setInterval(checkForVoice, 150);
+      window.addEventListener('click', () => { if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); }, { once: false });
+    } else {
+      if (startOverlay) startOverlay.onclick = activate;
+      window.addEventListener('click', activate, { once: false });
+    }
+
+    // Advanced Viseme Formant Analysis for Natural Lip-Sync
+    function analyzePhonemes() {
+      if (!analyser || !freqData) return { aa: 0, ih: 0, ou: 0, ee: 0, oh: 0, level: 0 };
+      analyser.getByteFrequencyData(freqData);
+
+      // Low frequency (200 - 600 Hz): Vowels 'oh' / 'ou'
+      let low = 0;
+      for (let i = 2; i <= 6; i++) low += freqData[i];
+      low = (low / 5) / 255;
+
+      // Mid frequency (700 - 1600 Hz): Vowel 'aa'
+      let mid = 0;
+      for (let i = 7; i <= 16; i++) mid += freqData[i];
+      mid = (mid / 10) / 255;
+
+      // High frequency (1700 - 3800 Hz): Vowels 'ee' / 'ih'
+      let high = 0;
+      for (let i = 17; i <= 36; i++) high += freqData[i];
+      high = (high / 20) / 255;
+
+      const totalLevel = Math.max(0, (low * 0.35 + mid * 0.45 + high * 0.2));
+
+      return {
+        aa: Math.min(1.0, mid * 1.8),
+        oh: Math.min(1.0, low * 1.5),
+        ou: Math.min(1.0, (low * 0.7 + mid * 0.3)),
+        ih: Math.min(1.0, high * 1.4),
+        ee: Math.min(1.0, (mid * 0.4 + high * 0.9)),
+        level: totalLevel
+      };
+    }
+
+    // ── Voice Fetch, Playback Queue & Barge-In ──
+    const speechQueue = [];
+    let isPlayingSpeech = false;
+    let emotionResetTimer = null;
+
+    function playNextSpeechChunk() {
+      if (speechQueue.length === 0) {
+        isPlayingSpeech = false;
+        // Natural emotional linger: hold expression and posture for 1.8s instead of cutting off immediately
+        if (emotionResetTimer) clearTimeout(emotionResetTimer);
+        emotionResetTimer = setTimeout(() => {
+          currentEmotion = 'neutral';
+        }, 1800);
+        statusEl.textContent = '● Listening for Riko...';
+        fetch('/done', { method: 'POST' }).catch(() => {});
+        return;
+      }
+
+      if (emotionResetTimer) clearTimeout(emotionResetTimer);
+      isPlayingSpeech = true;
+      const nextChunk = speechQueue.shift();
+      initAudio();
+      currentEmotion = nextChunk.emotion || 'neutral';
+      voice.src = nextChunk.audio;
+      statusEl.textContent = `🔊 Riko speaking... [${currentEmotion}]`;
+      voice.play().catch(err => {
+        console.warn('Playback error:', err);
+        playNextSpeechChunk();
+      });
+    }
+
+    voice.onended = () => {
+      playNextSpeechChunk();
+    };
+
+    voice.onerror = () => {
+      console.warn('Voice audio error, skipping to next chunk...');
+      playNextSpeechChunk();
+    };
+
+    async function checkForVoice() {
+      try {
+        const res = await fetch('/next');
+        if (!res.ok) return;
+        const data = await res.json();
+
+        // 1. Voice Barge-In (Stop immediately when user speaks)
+        if (data && data.command === 'stop') {
+          if (emotionResetTimer) clearTimeout(emotionResetTimer);
+          speechQueue.length = 0; // Clear remaining queued sentences
+          voice.pause();
+          voice.currentTime = 0;
+          isPlayingSpeech = false;
+          currentEmotion = 'neutral';
+          statusEl.textContent = '● Listening for Riko...';
+          return;
+        }
+
+        // 2. Locomotion & procedural movement actions (walk, sit, dance, stretch, spin, idle, switch_display, come_to_cursor)
+        if (data && data.command === 'action') {
+          if (data.action.startsWith('switch_display:')) {
+            const idx = parseInt(data.action.split(':')[1], 10);
+            if (window.electronAPI && window.electronAPI.switchDisplay) {
+              window.electronAPI.switchDisplay(idx);
+            }
+          } else if (data.action === 'come_to_cursor') {
+            if (window.electronAPI && window.electronAPI.moveToCursorDisplay) {
+              window.electronAPI.moveToCursorDisplay();
+            }
+          } else if (data.action === 'switch_display') {
+            if (window.electronAPI && window.electronAPI.switchDisplay) {
+              window.electronAPI.switchDisplay();
+            }
+          } else {
+            triggerLocomotionAction(data.action);
+          }
+          return;
+        }
+
+        // 3. Wardrobe avatar swap
+        if (data && data.command === 'switch_avatar') {
+          loadAvatar(`/avatar_model/${data.avatar}`);
+          return;
+        }
+
+        // 4. Queue speech chunk (preserves all sentences in sequence without cutoff)
+        if (data && data.audio) {
+          speechQueue.push({ audio: data.audio, emotion: data.emotion || 'neutral' });
+          if (!isPlayingSpeech) {
+            playNextSpeechChunk();
+          }
+        }
+      } catch {
+        // waiting
+      }
+    }
+
+    // ── 3D Scene Setup ──
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    if (isTransparent) {
+      scene.background = null;
+      renderer.setClearColor(0x000000, 0);
+    } else {
+      scene.background = new THREE.Color(0xf4f4f7);
+    }
+
+    let defaultHeadY = 1.35;
+    let screenHalfWidth = 2.5;
+    let visibleHeight = 3.5;
+    let targetIdleX = 1.8; // Default resting position on right side of screen
+    let controls = null;
+    let groundLevelY = 0;
+    let currentVrm = null;
+
+    const camera = new THREE.PerspectiveCamera(30, window.innerWidth / window.innerHeight, 0.1, 30);
+
+    function recalibrateCamera() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+
+      if (isTransparent) {
+        // Desktop Pet Ground Plane Calibration:
+        // Her height from feet to head (~1.35m) spans ~38% of monitor height
+        const desiredFraction = 0.38;
+        visibleHeight = defaultHeadY / desiredFraction;
+        const halfHeight = visibleHeight * 0.5;
+        const halfFovRad = (camera.fov * 0.5) * (Math.PI / 180);
+        const cameraDist = halfHeight / Math.tan(halfFovRad);
+
+        // Ground level where feet rest directly on Windows taskbar (NDC -1.0)
+        groundLevelY = -halfHeight;
+        screenHalfWidth = halfHeight * camera.aspect;
+
+        camera.position.set(0, 0, cameraDist);
+        camera.lookAt(0, 0, 0);
+
+        if (currentVrm) {
+          currentVrm.scene.position.y = groundLevelY;
+        }
+
+        // Clamp targetIdleX inside valid screen boundaries
+        const maxWalkX = screenHalfWidth - 0.50;
+        targetIdleX = Math.max(-maxWalkX, Math.min(maxWalkX, targetIdleX));
+      } else {
+        groundLevelY = 0;
+        const targetY = defaultHeadY * 0.65;
+        camera.position.set(0, targetY, 2.45);
+        camera.lookAt(0, targetY, 0);
+        if (controls) {
+          controls.target.set(0, targetY, 0);
+          controls.enabled = true;
+        }
+      }
+    }
+    recalibrateCamera();
+
+    const light = new THREE.DirectionalLight(0xffffff, Math.PI);
+    light.position.set(1, 1.5, 1);
+    scene.add(light);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+
+    // LookAt target for eyes and head (with low-pass smoothing filter)
+    const lookAtTarget = new THREE.Object3D();
+    lookAtTarget.position.set(0, defaultHeadY, 2.0);
+    scene.add(lookAtTarget);
+    const rawMouseTarget = new THREE.Vector3(0, defaultHeadY, 2.0);
+    let smoothMouseLeanX = 0;
+    let smoothMouseLeanY = 0;
+
+    // ── Gaze Tracking & Prolonged Stare Detection ──
+    let hoverHeadTimer = 0;
+    let isStaredAt = false;
+
+    // ── Interactive 3D Headpats & Physics Hitboxes ──
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    let touchState = null; // 'headpat' | 'poke'
+    let touchTimer = 0;
+
+    // Dynamic Click-Through state for Electron: lets apps behind Riko stay 100% clickable
+    let lastIgnoreState = null;
+    function updateMouseIgnore(shouldIgnore) {
+      if (window.electronAPI && window.electronAPI.setIgnoreMouseEvents && lastIgnoreState !== shouldIgnore) {
+        lastIgnoreState = shouldIgnore;
+        window.electronAPI.setIgnoreMouseEvents(shouldIgnore, { forward: true });
+      }
+    }
+
+    window.addEventListener('mousemove', (e) => {
+      // Natural gaze tracking across the entire screen
+      const mouseWorldX = ((e.clientX / window.innerWidth) - 0.5) * (screenHalfWidth * 2);
+      const mouseWorldY = (1.0 - (e.clientY / window.innerHeight)) * visibleHeight;
+      rawMouseTarget.set(mouseWorldX, mouseWorldY, 2.0);
+
+      // Pixel-perfect hit-test: if cursor touches Riko's 3D body or UI/drag controls, enable mouse clicks.
+      // If cursor is in empty transparent space, let all clicks pass through to VS Code / background apps.
+      let hitInteractive = false;
+      const targetEl = e.target;
+      if (targetEl && targetEl.closest && (targetEl.closest('#controls-bar') || targetEl.closest('.btn'))) {
+        hitInteractive = true;
+      } else if (currentVrm && camera) {
+        mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+        const hits = raycaster.intersectObjects(currentVrm.scene.children, true);
+        if (hits.length > 0) {
+          hitInteractive = true;
+        }
+      }
+
+      if (hitInteractive) {
+        updateMouseIgnore(false);
+      } else {
+        updateMouseIgnore(true);
+      }
+    });
+
+    window.addEventListener('mouseleave', () => {
+      updateMouseIgnore(true);
+    });
+
+    function spawnHeart(x, y, emoji = '💖') {
+      const el = document.createElement('div');
+      el.className = 'floating-heart';
+      el.textContent = emoji;
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 1200);
+    }
+
+    // ── Interactive Dragging along Taskbar & Multi-Monitor Hopping ──
+    let isDraggingAvatar = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let hasMovedDuringDrag = false;
+
+    window.addEventListener('pointerdown', (e) => {
+      if (!currentVrm || e.button !== 0) return;
+      if (e.target.closest && (e.target.closest('#controls-bar') || e.target.closest('.btn'))) return;
+
+      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+
+      const intersects = raycaster.intersectObjects(currentVrm.scene.children, true);
+      if (intersects.length > 0) {
+        isDraggingAvatar = true;
+        hasMovedDuringDrag = false;
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+      }
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (!isDraggingAvatar || !currentVrm) return;
+
+      const dist = Math.hypot(e.clientX - dragStartX, e.clientY - dragStartY);
+      if (dist > 5) {
+        hasMovedDuringDrag = true;
+      }
+
+      if (hasMovedDuringDrag) {
+        const mouseWorldX = ((e.clientX / window.innerWidth) - 0.5) * (screenHalfWidth * 2);
+        const maxWalkX = screenHalfWidth - 0.45;
+        const minWalkX = -screenHalfWidth + 0.45;
+        const clampedX = Math.max(minWalkX, Math.min(maxWalkX, mouseWorldX));
+        currentVrm.scene.position.x = clampedX;
+        targetIdleX = clampedX;
+
+        // Multi-Monitor Boundary Hopping: if dragged to the extreme screen edge, jump to next screen!
+        if (window.electronAPI && window.electronAPI.switchDisplay) {
+          if (e.clientX <= 2 && dragStartX > 30) {
+            window.electronAPI.switchDisplay();
+            isDraggingAvatar = false;
+          } else if (e.clientX >= window.innerWidth - 3 && dragStartX < window.innerWidth - 30) {
+            window.electronAPI.switchDisplay();
+            isDraggingAvatar = false;
+          }
+        }
+      }
+    });
+
+    window.addEventListener('pointerup', (e) => {
+      if (!isDraggingAvatar) return;
+      isDraggingAvatar = false;
+
+      // Clicked without dragging -> trigger headpat or poke!
+      if (!hasMovedDuringDrag && currentVrm) {
+        mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObjects(currentVrm.scene.children, true);
+        if (intersects.length > 0) {
+          const hitY = intersects[0].point.y;
+          if (hitY >= defaultHeadY - 0.22) {
+            touchState = 'headpat';
+            touchTimer = 2.4;
+            spawnHeart(e.clientX, e.clientY, Math.random() > 0.5 ? '💖' : '✨');
+            statusEl.textContent = '💖 Hehe... senpai is patting my head...';
+            statusEl.style.display = 'block';
+            setTimeout(() => { if (!touchState) statusEl.style.display = 'none'; }, 2400);
+          } else {
+            touchState = 'poke';
+            touchTimer = 1.8;
+            spawnHeart(e.clientX, e.clientY, '💢');
+            statusEl.textContent = '💢 Baka! Where are you touching, senpai?!';
+            statusEl.style.display = 'block';
+            setTimeout(() => { if (!touchState) statusEl.style.display = 'none'; }, 1800);
+          }
+        }
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      recalibrateCamera();
+    });
+
+    // Multi-Monitor change listener from Electron
+    if (window.electronAPI && window.electronAPI.onDisplayChanged) {
+      window.electronAPI.onDisplayChanged((data) => {
+        recalibrateCamera();
+        const maxWalkX = screenHalfWidth - 0.50;
+        targetIdleX = Math.max(-maxWalkX, Math.min(maxWalkX, targetIdleX));
+        if (currentVrm) currentVrm.scene.position.x = targetIdleX;
+      });
+    }
+
+    function recenterCamera() {
+      recalibrateCamera();
+    }
+    btnReset.onclick = recenterCamera;
+
+    // ── Wardrobe Switcher: Cycle Available VRMs ──
+    async function cycleWardrobe() {
+      try {
+        const res = await fetch('/avatars');
+        if (!res.ok) return;
+        const data = await res.json();
+        const list = data.avatars || [];
+        if (list.length <= 1) {
+          statusEl.textContent = 'Drop more .vrm files in character_files/avatars/ to switch outfits!';
+          return;
+        }
+        const curr = data.current || list[0];
+        const nextIdx = (list.indexOf(curr) + 1) % list.length;
+        const nextModel = list[nextIdx];
+        loadAvatar(`/avatar_model/${nextModel}`);
+      } catch (e) {
+        console.error('Wardrobe error:', e);
+      }
+    }
+    btnWardrobe.onclick = cycleWardrobe;
+
+    // Desktop Shortcuts: R = Recenter, T = Theme, W = Wardrobe, H = Hide UI, Esc/Space = Stop Speech
+    let uiVisible = !isTransparent;
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' || e.code === 'Space') {
+        if (!voice.paused && voice.currentTime > 0) {
+          voice.pause();
+          voice.currentTime = 0;
+          fetch('/interrupted', { method: 'POST' }).catch(() => {});
+          statusEl.textContent = '● Listening for Riko...';
+        }
+      }
+      if (e.key === 'm' || e.key === 'M') {
+        if (window.electronAPI && window.electronAPI.switchDisplay) {
+          window.electronAPI.switchDisplay();
+        }
+      }
+      if (e.key === 'r' || e.key === 'R') recenterCamera();
+      if (e.key === 'w' || e.key === 'W') cycleWardrobe();
+      if (e.key === 't' || e.key === 'T') btnTheme.click();
+      if (e.key === 'h' || e.key === 'H') {
+        uiVisible = !uiVisible;
+        controlsBar.style.display = uiVisible ? 'flex' : 'none';
+        statusEl.style.display = uiVisible ? 'block' : 'none';
+      }
+    });
+
+    // ── Stage Background Themes ──
+    const themes = [
+      { name: 'Studio Gray', color: 0xf4f4f7 },
+      { name: 'Anime Pink', color: 0xfce4ec },
+      { name: 'Dark Slate', color: 0x1e1e24 },
+      { name: 'Midnight Blue', color: 0x0f172a }
+    ];
+    let themeIndex = 0;
+    btnTheme.onclick = () => {
+      themeIndex = (themeIndex + 1) % themes.length;
+      scene.background = new THREE.Color(themes[themeIndex].color);
+      document.body.style.background = '#' + themes[themeIndex].color.toString(16).padStart(6, '0');
+    };
+
+    // ── Load VRM Avatar Loader ──
+    const loader = new GLTFLoader();
+    loader.register((parser) => new VRMLoaderPlugin(parser));
+    let fingerBones = { left: [], right: [] };
+
+    function loadAvatar(vrmUrl) {
+      loader.load(
+        vrmUrl,
+        (gltf) => {
+          if (currentVrm) {
+            scene.remove(currentVrm.scene);
+            VRMUtils.deepDispose(currentVrm.scene);
+          }
+          const vrm = gltf.userData.vrm;
+          currentVrm = vrm;
+          VRMUtils.rotateVRM0(vrm);
+          scene.add(vrm.scene);
+
+          scene.updateMatrixWorld(true);
+          const headNode = vrm.humanoid?.getNormalizedBoneNode('head');
+          const headPos = new THREE.Vector3();
+          if (headNode) headNode.getWorldPosition(headPos);
+          defaultHeadY = (headPos.y > 0.5) ? headPos.y : 1.35;
+
+          recalibrateCamera();
+
+          if (isTransparent) {
+            targetIdleX = screenHalfWidth - 0.75;
+            currentVrm.scene.position.x = targetIdleX;
+            currentVrm.scene.position.y = groundLevelY;
+          }
+
+          if (isTransparent) {
+            if (controls) {
+              controls.dispose();
+              controls = null;
+            }
+          } else {
+            if (controls) controls.dispose();
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+            const lookTargetY = defaultHeadY * 0.65;
+            controls.target.set(0, lookTargetY, 0);
+            controls.minDistance = 0.5;
+            controls.maxDistance = 4;
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.08;
+            controls.update();
+          }
+
+          lookAtTarget.position.set(0, defaultHeadY, 2.0);
+          if (vrm.lookAt) {
+            vrm.lookAt.target = lookAtTarget;
+          }
+
+          // Cache all 30 humanoid finger joint nodes
+          fingerBones = { left: [], right: [] };
+          const fNames = ['Thumb', 'Index', 'Middle', 'Ring', 'Little'];
+          const sNames = ['Metacarpal', 'Proximal', 'Intermediate', 'Distal'];
+          ['left', 'right'].forEach(side => {
+            fNames.forEach(finger => {
+              sNames.forEach(seg => {
+                const bName = `${side}${finger}${seg}`;
+                const node = vrm.humanoid?.getNormalizedBoneNode(bName);
+                if (node) {
+                  fingerBones[side].push({ name: bName, finger, seg, node });
+                }
+              });
+            });
+          });
+
+          statusEl.textContent = 'Avatar ready!';
+        },
+        undefined,
+        (err) => {
+          console.error('Failed to load avatar:', err);
+          statusEl.textContent = 'Error loading avatar model';
+        }
+      );
+    }
+
+    // Load initial default avatar
+    loadAvatar('avatar.vrm');
+
+    // ── Natural Blinking, Saccades & Organic Movement System ──
+    let blinkTimer = 0;
+    let nextBlink = 3.0;
+    let isBlinking = false;
+    let isDoubleBlink = false;
+
+    // Eye Saccades (Micro-darting gaze)
+    let saccadeTimer = 0;
+    let nextSaccade = 1.5;
+    const saccadeOffset = new THREE.Vector3(0, 0, 0);
+
+    // Natural idle attention glance away
+    let glanceTimer = 0;
+    let nextGlance = 7.0;
+    let isGlancingAway = false;
+    const glanceTarget = new THREE.Vector3(0, 0, 0);
+
+    const clock = new THREE.Clock();
+    const emotionWeights = { happy: 0, angry: 0, sad: 0, surprised: 0, relaxed: 0 };
+
+    // ── Procedural Locomotion & Expressive Movement Engine ──
+    let locomotionState = 'idle'; // 'idle', 'walk', 'sit', 'dance', 'stretch', 'spin'
+    let locomotionTimer = 0;
+    let walkPhase = 0;
+    let walkDirection = 1; // 1 = walking right, -1 = walking left
+    let spinAngle = 0;
+    let idleLocomotionTimer = 0; // autonomous strolling / stretching when idle
+
+    function triggerLocomotionAction(action) {
+      const act = (action || 'idle').toLowerCase().trim();
+      if (act === 'walk' || act === 'pace') {
+        locomotionState = 'walk';
+        statusEl.textContent = '🚶 Pacing across senpai\'s desktop...';
+      } else if (act === 'sit') {
+        locomotionState = 'sit';
+        statusEl.textContent = '🪑 Sitting comfortably above the taskbar...';
+      } else if (act === 'dance') {
+        locomotionState = 'dance';
+        locomotionTimer = 12.0; // 12 seconds dance
+        statusEl.textContent = '🎵 Dancing for senpai! Hehe~';
+      } else if (act === 'stretch') {
+        locomotionState = 'stretch';
+        locomotionTimer = 4.5;
+        statusEl.textContent = '🥱 *Yaaawn*... good stretch!';
+      } else if (act === 'spin' || act === 'twirl') {
+        locomotionState = 'spin';
+        spinAngle = 0;
+        statusEl.textContent = '✨ Spinning around for senpai!';
+      } else {
+        locomotionState = 'idle';
+        locomotionTimer = 0;
+        statusEl.textContent = '● Attentive idle stance';
+      }
+      statusEl.style.display = 'block';
+      setTimeout(() => {
+        if (locomotionState === 'idle') statusEl.style.display = 'none';
+      }, 2500);
+    }
+
+    // ── Smooth Damped Euler Interpolation (Exponential Filter) ──
+    function smoothDampEuler(node, tx, ty, tz, speed, dt) {
+      if (!node) return;
+      const factor = 1.0 - Math.exp(-speed * dt);
+      node.rotation.x += (tx - node.rotation.x) * factor;
+      node.rotation.y += (ty - node.rotation.y) * factor;
+      node.rotation.z += (tz - node.rotation.z) * factor;
+    }
+
+    // ── Anatomical Hand & Finger Articulation System ──
+    // Natural anatomical resting curl cascade (Index -> Little) + thumb opposability
+    const fingerCascade = {
+      Thumb: 0.22,
+      Index: 0.25,
+      Middle: 0.32,
+      Ring: 0.38,
+      Little: 0.46
+    };
+
+    const segmentWeights = {
+      Metacarpal: 0.15,
+      Proximal: 0.55,
+      Intermediate: 0.35,
+      Distal: 0.20
+    };
+
+    function updateFingerPoses(delta, time, isSpeaking, speechLevel, emotion, touch) {
+      // 1. Emotion & touch modulation
+      let curlMult = 1.0;
+      let splayMult = 1.0;
+
+      if (touch === 'headpat') {
+        curlMult = 0.65; // Relaxed, gentle hand curve
+        splayMult = 0.85;
+      } else if (touch === 'poke' || emotion === 'angry') {
+        curlMult = 1.80; // Tight, tense tsundere semi-fist
+        splayMult = 0.45;
+      } else if (emotion === 'happy') {
+        curlMult = 0.55; // Open cheerful splay
+        splayMult = 1.35;
+      } else if (emotion === 'surprised') {
+        curlMult = 0.35; // Splayed wide in shock
+        splayMult = 1.60;
+      } else if (emotion === 'sad') {
+        curlMult = 1.25; // Limp, dejected curl
+        splayMult = 0.70;
+      }
+
+      // 2. Dynamic conversational micro-flutter (breathing fingers with voice cadence)
+      let speechMod = 0;
+      if (isSpeaking) {
+        speechMod = Math.sin(time * 5.5) * (speechLevel * 0.40);
+      }
+
+      // Subtle biological resting micro-drift
+      const microDrift = Math.sin(time * 1.8) * 0.025;
+
+      ['left', 'right'].forEach(side => {
+        const bones = fingerBones[side];
+        if (!bones || bones.length === 0) return;
+
+        const isLeft = (side === 'left');
+        const sign = isLeft ? -1.0 : 1.0;
+
+        bones.forEach(({ finger, seg, node }) => {
+          const baseCurl = (fingerCascade[finger] || 0.25) * (segmentWeights[seg] || 0.3);
+          const totalCurl = Math.max(0.04, (baseCurl * curlMult) - speechMod + microDrift);
+
+          let targetX = 0;
+          let targetY = 0;
+          let targetZ = sign * totalCurl;
+
+          // Natural finger splay (abduction / adduction along Y-axis)
+          if (finger === 'Index') {
+            targetY = (isLeft ? -0.04 : 0.04) * splayMult;
+          } else if (finger === 'Ring') {
+            targetY = (isLeft ? 0.03 : -0.03) * splayMult;
+          } else if (finger === 'Little') {
+            targetY = (isLeft ? 0.07 : -0.07) * splayMult;
+          } else if (finger === 'Thumb') {
+            // Thumb flexes diagonally across the palm (opposed)
+            targetZ = sign * (totalCurl * 0.75);
+            targetY = (isLeft ? 0.22 : -0.22) * splayMult;
+            targetX = 0.10;
+          }
+
+          smoothDampEuler(node, targetX, targetY, targetZ, 12.0, delta);
+        });
+      });
+    }
+
+    renderer.setAnimationLoop(() => {
+      const delta = clock.getDelta();
+      const time = clock.getElapsedTime();
+
+      if (currentVrm) {
+        const humanoid = currentVrm.humanoid;
+        const hips = humanoid?.getNormalizedBoneNode('hips');
+        const spine = humanoid?.getNormalizedBoneNode('spine');
+        const chest = humanoid?.getNormalizedBoneNode('chest') || spine;
+        const neck = humanoid?.getNormalizedBoneNode('neck');
+        const headNode = humanoid?.getNormalizedBoneNode('head');
+        const leftShoulder = humanoid?.getNormalizedBoneNode('leftShoulder');
+        const rightShoulder = humanoid?.getNormalizedBoneNode('rightShoulder');
+        const leftArm = humanoid?.getNormalizedBoneNode('leftUpperArm');
+        const rightArm = humanoid?.getNormalizedBoneNode('rightUpperArm');
+        const leftLowerArm = humanoid?.getNormalizedBoneNode('leftLowerArm');
+        const rightLowerArm = humanoid?.getNormalizedBoneNode('rightLowerArm');
+        const leftHand = humanoid?.getNormalizedBoneNode('leftHand');
+        const rightHand = humanoid?.getNormalizedBoneNode('rightHand');
+        const leftUpperLeg = humanoid?.getNormalizedBoneNode('leftUpperLeg');
+        const rightUpperLeg = humanoid?.getNormalizedBoneNode('rightUpperLeg');
+        const leftLowerLeg = humanoid?.getNormalizedBoneNode('leftLowerLeg');
+        const rightLowerLeg = humanoid?.getNormalizedBoneNode('rightLowerLeg');
+        const leftFoot = humanoid?.getNormalizedBoneNode('leftFoot');
+        const rightFoot = humanoid?.getNormalizedBoneNode('rightFoot');
+
+        // Locomotion & Leg targets
+        let tLLegX = 0, tLLegY = 0.03, tLLegZ = 0.035;
+        let tRLegX = 0, tRLegY = -0.03, tRLegZ = -0.035;
+        let tLKneeX = 0, tLKneeY = 0, tLKneeZ = 0;
+        let tRKneeX = 0, tRKneeY = 0, tRKneeZ = 0;
+        let tLFootX = 0, tLFootY = 0, tLFootZ = 0;
+        let tRFootX = 0, tRFootY = 0, tRFootZ = 0;
+        let legSpeed = 8.0;
+
+        // ── 1. Organic Weight Shifting, Contrapposto & Multi-Joint Breathing ──
+        // Hip contrapposto weight sway (transfers body weight every 4-6 seconds)
+        const weightCycle = Math.sin(time * 0.45);
+        if (hips) {
+          hips.rotation.z = weightCycle * 0.045; // Natural hip tilt (2.6 deg)
+          hips.rotation.y = Math.cos(time * 0.35) * 0.035;
+          hips.position.x = weightCycle * 0.022; // Weight shifts between feet
+        }
+
+        // Sinusoidal organic breathing across spine, chest and shoulders
+        const breathCycle = Math.sin(time * 1.6);
+
+        if (spine) {
+          // Counter-balancing spine tilt to keep head balanced over hips
+          spine.rotation.z = -weightCycle * 0.032 + Math.sin(time * 0.6) * 0.015;
+          spine.rotation.x = breathCycle * 0.022;
+          spine.rotation.y = Math.sin(time * 0.4) * 0.025;
+        }
+        if (chest) {
+          chest.rotation.z = -weightCycle * 0.018;
+          chest.rotation.x = Math.sin(time * 1.6 + 0.3) * 0.018;
+          chest.rotation.y = Math.sin(time * 0.35) * 0.020;
+        }
+        if (neck) {
+          neck.rotation.x = -breathCycle * 0.010;
+          neck.rotation.y = 0;
+          neck.rotation.z = Math.sin(time * 0.5) * 0.020;
+        }
+        if (leftShoulder) leftShoulder.rotation.z = -breathCycle * 0.016;
+        if (rightShoulder) rightShoulder.rotation.z = breathCycle * 0.016;
+
+        // ── 2. Unified Gaze Tracking with Eye Saccades & Attention Wander ──
+        saccadeTimer += delta;
+        if (saccadeTimer > nextSaccade) {
+          saccadeOffset.set(
+            (Math.random() - 0.5) * 0.08,
+            (Math.random() - 0.5) * 0.06,
+            0
+          );
+          saccadeTimer = 0;
+          nextSaccade = 1.4 + Math.random() * 2.5;
+        }
+
+        glanceTimer += delta;
+        if (glanceTimer > nextGlance) {
+          isGlancingAway = !isGlancingAway;
+          glanceTimer = 0;
+          if (isGlancingAway) {
+            glanceTarget.set(
+              (Math.random() > 0.5 ? 0.5 : -0.5),
+              defaultHeadY + (Math.random() * 0.3 - 0.15),
+              2.0
+            );
+            nextGlance = 1.0 + Math.random() * 1.2;
+          } else {
+            nextGlance = 5.0 + Math.random() * 5.0;
+          }
+        }
+
+        // Single, silky-smooth lerp for lookAt target
+        const activeGazeTarget = isGlancingAway ? glanceTarget : rawMouseTarget.clone().add(saccadeOffset);
+        const gazeLerpFactor = 1.0 - Math.exp(-5.0 * delta);
+        lookAtTarget.position.lerp(activeGazeTarget, gazeLerpFactor);
+
+        // ── 3. Phoneme Analysis & Audio Level ──
+        const phonemes = analyzePhonemes();
+        const isSpeaking = phonemes.level > 0.06;
+
+        // ── 4. Dynamic Emotional Gestures, Conversational Gesticulation & Articulation ──
+        let tLArmX = 0, tLArmY = 0, tLArmZ = -1.20 + breathCycle * 0.02;
+        let tRArmX = 0, tRArmY = 0, tRArmZ = 1.20 - breathCycle * 0.02;
+        let tLLowY = 0.20, tRLowY = -0.20;
+        let tLHandX = 0.02, tLHandY = 0.04, tLHandZ = 0.08;
+        let tRHandX = 0.02, tRHandY = -0.04, tRHandZ = -0.08;
+        let armSpeed = 7.5;
+
+        // Head Orientations (subtle gestures, leaving gaze pointing to VRM lookAt)
+        if (headNode) {
+          if (touchState === 'headpat') {
+            headNode.rotation.x = -0.12;
+            headNode.rotation.y = 0;
+            headNode.rotation.z = Math.sin(time * 3.5) * 0.05;
+          } else if (touchState === 'poke') {
+            headNode.rotation.x = 0;
+            headNode.rotation.y = 0;
+            headNode.rotation.z = -0.16;
+          } else if (isSpeaking) {
+            // Conversational nodding on phoneme level
+            headNode.rotation.x = -0.04 + Math.sin(time * 8.5) * (phonemes.level * 0.08);
+            headNode.rotation.y = 0;
+            headNode.rotation.z = (currentEmotion === 'angry') ? -0.08 + Math.sin(time * 3.5) * 0.04 : Math.sin(time * 2.8) * 0.025;
+          } else if (currentEmotion === 'angry') {
+            headNode.rotation.x = 0;
+            headNode.rotation.y = 0;
+            headNode.rotation.z = Math.sin(time * 2.2) * 0.04 - 0.10;
+          } else if (currentEmotion === 'sad') {
+            headNode.rotation.x = 0.18;
+            headNode.rotation.y = 0;
+            headNode.rotation.z = 0;
+          } else {
+            // Natural idle head breathing
+            headNode.rotation.x = -breathCycle * 0.005;
+            headNode.rotation.y = 0;
+            headNode.rotation.z = Math.sin(time * 0.45) * 0.035;
+          }
+        }
+
+        if (touchState === 'headpat') {
+          touchTimer -= delta;
+          if (touchTimer <= 0) touchState = null;
+          currentVrm.scene.position.y = groundLevelY + Math.sin(time * 2.0) * 0.005;
+          tLArmX = -0.2; tLArmY = 0; tLArmZ = -1.15;
+          tRArmX = -0.2; tRArmY = 0; tRArmZ = 1.15;
+          tLLowY = 0.15; tRLowY = -0.15;
+          tLHandZ = 0.06; tRHandZ = -0.06;
+        } else if (touchState === 'poke') {
+          touchTimer -= delta;
+          if (touchTimer <= 0) touchState = null;
+          currentVrm.scene.position.y = groundLevelY;
+          tLArmX = -0.5; tLArmY = -0.3; tLArmZ = -0.9;
+          tRArmX = -0.5; tRArmY = 0.3; tRArmZ = 0.9;
+          tLLowY = 0.4; tRLowY = -0.4;
+          armSpeed = 10.0;
+        } else if (touchState === 'flustered') {
+          touchTimer -= delta;
+          if (touchTimer <= 0) touchState = null;
+          currentVrm.scene.position.y = groundLevelY;
+          tLArmX = -0.2; tLArmY = 0.2; tLArmZ = -1.0;
+          tRArmX = -0.3; tRArmY = -0.2; tRArmZ = 0.95;
+          tLLowY = 0.3; tRLowY = -0.3;
+        } else if (isSpeaking) {
+          // ── Natural Conversational Gesticulation (Speaking with Voice Cadence) ──
+          if (currentEmotion === 'happy') {
+            // Cheerful, spirited speaking: bouncing cadence + dynamic alternating gestures
+            currentVrm.scene.position.y = groundLevelY + Math.abs(Math.sin(time * 5.0)) * 0.018;
+            const happyWave = Math.sin(time * 4.5) * 0.15;
+            tRArmX = -0.55 + happyWave;
+            tRArmY = -0.1;
+            tRArmZ = 0.65 + Math.cos(time * 4.5) * 0.12;
+            tRLowY = -0.75 + Math.sin(time * 4.5) * 0.25;
+            tRHandZ = Math.sin(time * 9.0) * 0.22;
+
+            tLArmX = -0.25 + Math.sin(time * 3.0) * 0.10;
+            tLArmY = 0.15;
+            tLArmZ = -1.10 + Math.sin(time * 3.0) * 0.08;
+            tLLowY = 0.40;
+            armSpeed = 9.0;
+          } else if (currentEmotion === 'angry' || currentEmotion === 'jealous') {
+            // Sassy Tsundere / Jealous gesticulation: sharp emphasis with arms crossed or hand huffing
+            currentVrm.scene.position.y = groundLevelY;
+            tLArmX = -0.45; tLArmY = 0.40; tLArmZ = -0.92;
+            tRArmX = -0.45; tRArmY = -0.40; tRArmZ = 0.92;
+            tLLowY = 1.25 + Math.sin(time * 4.0) * 0.10;
+            tRLowY = -1.25 - Math.sin(time * 4.0) * 0.10;
+            tLHandZ = -0.12; tRHandZ = 0.12;
+            armSpeed = 10.0;
+          } else if (currentEmotion === 'flustered') {
+            // Flustered / Embarrassed: nervous hand flutter & fidgeting in front of chest
+            currentVrm.scene.position.y = groundLevelY;
+            tLArmX = -0.32 + Math.sin(time * 6.0) * 0.05;
+            tLArmY = 0.22;
+            tLArmZ = -0.98;
+            tRArmX = -0.32 + Math.cos(time * 6.0) * 0.05;
+            tRArmY = -0.22;
+            tRArmZ = 0.98;
+            tLLowY = 0.85; tRLowY = -0.85;
+            tLHandZ = 0.15; tRHandZ = -0.15;
+            armSpeed = 11.0;
+          } else if (currentEmotion === 'smug') {
+            // Confident tsundere smugness: hand on hip, slight head tilt
+            currentVrm.scene.position.y = groundLevelY;
+            tLArmX = -0.35; tLArmY = 0.22; tLArmZ = -0.92;
+            tLLowY = 0.95;
+            tLHandZ = 0.14;
+            tRArmX = -0.12 + Math.sin(time * 2.5) * 0.04;
+            tRArmY = -0.10;
+            tRArmZ = 1.15;
+            tRLowY = -0.30;
+            armSpeed = 7.0;
+          } else if (currentEmotion === 'caring') {
+            // Soft caring / protective: gentle hands clasped, leaning in attentively
+            currentVrm.scene.position.y = groundLevelY;
+            tLArmX = -0.25; tLArmY = 0.14; tLArmZ = -1.02;
+            tRArmX = -0.25; tRArmY = -0.14; tRArmZ = 1.02;
+            tLLowY = 0.60; tRLowY = -0.60;
+            tLHandZ = 0.10; tRHandZ = -0.10;
+            armSpeed = 6.0;
+          } else if (currentEmotion === 'surprised') {
+            // Leaning back with raised hands and wide gaze
+            currentVrm.scene.position.y = groundLevelY;
+            if (spine) spine.rotation.x = -0.08;
+            tLArmX = -0.45 + Math.sin(time * 3.0) * 0.06;
+            tLArmY = 0.25;
+            tLArmZ = -0.80;
+            tRArmX = -0.45 + Math.cos(time * 3.0) * 0.06;
+            tRArmY = -0.25;
+            tRArmZ = 0.80;
+            tLLowY = 0.45; tRLowY = -0.45;
+            tLHandX = -0.15; tRHandX = -0.15;
+            armSpeed = 9.0;
+          } else {
+            // Natural conversational storytelling (alternating expressive gesticulation)
+            currentVrm.scene.position.y = groundLevelY;
+            const gesticulateY = Math.sin(time * 3.2) * 0.14;
+            const gesticulateZ = Math.cos(time * 2.8) * 0.10;
+            tRArmX = -0.38 + gesticulateY;
+            tRArmY = -0.20;
+            tRArmZ = 0.72 + gesticulateZ;
+            tRLowY = -0.75 + Math.sin(time * 3.2) * 0.22;
+
+            // Secondary wrist inertia lag (Disney follow-through)
+            const wristLag = time * 3.2 - 0.45;
+            tRHandX = Math.sin(wristLag) * 0.08;
+            tRHandY = -Math.cos(wristLag) * 0.10;
+            tRHandZ = -Math.sin(wristLag) * 0.15;
+
+            tLArmX = -0.10 + Math.sin(time * 2.0) * 0.06;
+            tLArmY = 0.12;
+            tLArmZ = -1.15 + Math.sin(time * 1.6) * 0.04;
+            tLLowY = 0.25;
+            tLHandZ = 0.08 + Math.sin(time * 1.6) * 0.03;
+            armSpeed = 8.0;
+          }
+        } else if (currentEmotion === 'angry') {
+          // Standing tsundere crossed-arms pose while listening
+          currentVrm.scene.position.y = groundLevelY;
+          if (headNode) headNode.rotation.z = Math.sin(time * 2.2) * 0.04 - 0.10;
+          tLArmX = -0.4; tLArmY = 0.45; tLArmZ = -0.9;
+          tRArmX = -0.4; tRArmY = -0.45; tRArmZ = 0.9;
+          tLLowY = 1.3; tRLowY = -1.3;
+          tLHandZ = -0.12; tRHandZ = 0.12;
+        } else if (currentEmotion === 'happy') {
+          // Cheerful resting pose with subtle bounce
+          currentVrm.scene.position.y = groundLevelY + Math.abs(Math.sin(time * 2.5)) * 0.008;
+          tLArmZ = -1.15 + Math.sin(time * 1.6) * 0.03;
+          tRArmX = -0.30; tRArmY = -0.15; tRArmZ = 0.85;
+          tRLowY = -0.45;
+          tRHandZ = Math.sin(time * 4.0) * 0.12;
+          tLHandZ = 0.08;
+        } else {
+          // ── Rich Organic Idle Stance Cycling (Rayen 104 Animation Paradigm) ──
+          currentVrm.scene.position.y = groundLevelY;
+          const stanceCycle = Math.floor(time / 14.0) % 3;
+
+          if (stanceCycle === 0) {
+            // Stance A: Natural anime resting pose (hands gently forward at thighs with elbow bend)
+            tLArmX = -0.12 + Math.sin(time * 0.8) * 0.03;
+            tLArmY = 0.08;
+            tLArmZ = -1.18 + breathCycle * 0.02;
+            tRArmX = -0.12 + Math.cos(time * 0.8) * 0.03;
+            tRArmY = -0.08;
+            tRArmZ = 1.18 - breathCycle * 0.02;
+            tLLowY = 0.30;
+            tRLowY = -0.30;
+            tLHandX = 0.04; tLHandY = 0.05; tLHandZ = 0.08;
+            tRHandX = 0.04; tRHandY = -0.05; tRHandZ = -0.08;
+          } else if (stanceCycle === 1) {
+            // Stance B: Relaxed anime hands-clasped-in-front posture
+            tLArmX = -0.22; tLArmY = 0.15; tLArmZ = -1.05;
+            tRArmX = -0.22; tRArmY = -0.15; tRArmZ = 1.05;
+            tLLowY = 0.65 + breathCycle * 0.03;
+            tRLowY = -0.65 - breathCycle * 0.03;
+            tLHandZ = 0.15; tRHandZ = -0.15;
+          } else {
+            // Stance C: Confident tsundere single-hand on hip
+            tLArmX = -0.28; tLArmY = 0.20; tLArmZ = -0.95;
+            tLLowY = 0.90;
+            tLHandZ = 0.12;
+
+            tRArmX = -0.08; tRArmY = -0.05; tRArmZ = 1.20 - breathCycle * 0.02;
+            tRLowY = -0.25;
+            tRHandZ = -0.08;
+          }
+          armSpeed = 5.0; // gentle, graceful idle stance transitions
+        }
+
+        // ── 5. Procedural Locomotion State Machine (Walk, Sit, Dance, Stretch, Spin, Idle) ──
+        if (locomotionState === 'walk') {
+          walkPhase += delta * 4.2;
+          const legL = Math.sin(walkPhase);
+          const legR = -legL;
+
+          tLLegX = legL * 0.42;
+          tRLegX = legR * 0.42;
+          tLLegY = 0.04; tRLegY = -0.04;
+          tLKneeX = Math.max(0, -legL) * 0.75;
+          tRKneeX = Math.max(0, -legR) * 0.75;
+          tLFootX = legL * 0.18;
+          tRFootX = legR * 0.18;
+
+          currentVrm.scene.position.y = groundLevelY + Math.abs(Math.sin(walkPhase)) * 0.022;
+          if (hips) hips.rotation.z = Math.sin(walkPhase) * 0.035;
+
+          // Opposing arm swing
+          tLArmX = -legR * 0.35;
+          tRArmX = -legL * 0.35;
+          tLArmZ = -1.15; tRArmZ = 1.15;
+          tLLowY = 0.30; tRLowY = -0.30;
+          armSpeed = 9.0;
+          legSpeed = 10.0;
+
+          // Screen boundary aware taskbar pacing
+          const maxWalkX = screenHalfWidth - 0.50;
+          const minWalkX = -screenHalfWidth + 0.50;
+          currentVrm.scene.position.x += walkDirection * delta * 0.20;
+          if (currentVrm.scene.position.x >= maxWalkX) {
+            walkDirection = -1;
+          } else if (currentVrm.scene.position.x <= minWalkX) {
+            walkDirection = 1;
+          }
+          targetIdleX = currentVrm.scene.position.x;
+          const targetRotY = (walkDirection > 0 ? 0.38 : -0.38);
+          currentVrm.scene.rotation.y += (targetRotY - currentVrm.scene.rotation.y) * (1.0 - Math.exp(-6.0 * delta));
+        } else if (locomotionState === 'sit') {
+          // Sit comfortably above taskbar with legs dangling down naturally
+          tLLegX = 1.45; tRLegX = 1.45;
+          tLLegZ = 0.08; tRLegZ = -0.08;
+          tLKneeX = -1.48; tRKneeX = -1.48;
+          tLFootX = 0.15; tRFootX = 0.15;
+
+          currentVrm.scene.position.y += ((groundLevelY - 0.38) - currentVrm.scene.position.y) * (1.0 - Math.exp(-5.0 * delta));
+          currentVrm.scene.rotation.y += (0 - currentVrm.scene.rotation.y) * (1.0 - Math.exp(-6.0 * delta));
+          tLArmX = -0.50; tLArmY = 0.15; tLArmZ = -1.0;
+          tRArmX = -0.50; tRArmY = -0.15; tRArmZ = 1.0;
+          tLLowY = 0.55; tRLowY = -0.55;
+          armSpeed = 6.0;
+          legSpeed = 6.0;
+        } else if (locomotionState === 'dance') {
+          locomotionTimer -= delta;
+          if (locomotionTimer <= 0) locomotionState = 'idle';
+
+          currentVrm.scene.position.x = Math.sin(time * 3.2) * 0.12;
+          currentVrm.scene.position.y = groundLevelY + Math.abs(Math.sin(time * 6.4)) * 0.024;
+          if (hips) hips.rotation.z = Math.sin(time * 3.2) * 0.06;
+          if (headNode) headNode.rotation.z = Math.cos(time * 3.2) * 0.08;
+
+          tLLegX = Math.sin(time * 3.2) * 0.18;
+          tRLegX = -Math.sin(time * 3.2) * 0.18;
+          tLKneeX = Math.max(0, -Math.sin(time * 3.2)) * 0.35;
+          tRKneeX = Math.max(0, Math.sin(time * 3.2)) * 0.35;
+
+          tLArmZ = -1.60 + Math.sin(time * 3.2) * 0.35;
+          tRArmZ = 1.60 - Math.sin(time * 3.2) * 0.35;
+          tLArmX = -0.30; tRArmX = -0.30;
+          tLLowY = 0.65; tRLowY = -0.65;
+          armSpeed = 10.0;
+          legSpeed = 10.0;
+        } else if (locomotionState === 'stretch') {
+          locomotionTimer -= delta;
+          if (locomotionTimer <= 0) locomotionState = 'idle';
+
+          // Natural upright skyward arm stretch
+          tLArmZ = -2.70; tRArmZ = 2.70;
+          tLArmX = -0.10; tRArmX = -0.10;
+          tLLowY = 0.20; tRLowY = -0.20;
+
+          // Upright spine with gentle side stretch sway (zero backward hyperextension)
+          if (spine) {
+            spine.rotation.x = 0.02;
+            spine.rotation.z = Math.sin(time * 2.2) * 0.035;
+          }
+          if (neck) {
+            neck.rotation.x = 0.03;
+            neck.rotation.y = 0;
+          }
+          if (headNode) {
+            headNode.rotation.x = 0.03;
+            headNode.rotation.y = 0;
+            headNode.rotation.z = Math.sin(time * 2.2) * 0.025;
+          }
+          currentVrm.scene.position.y = groundLevelY + 0.015; // gentle heel rise
+          armSpeed = 4.5;
+        } else if (locomotionState === 'spin') {
+          spinAngle += delta * 6.5;
+          currentVrm.scene.rotation.y = spinAngle;
+          tLArmZ = -0.85; tRArmZ = 0.85;
+          tLArmX = -0.15; tRArmX = -0.15;
+          tLLowY = 0.35; tRLowY = -0.35;
+          if (spinAngle >= Math.PI * 2) {
+            currentVrm.scene.rotation.y = 0;
+            locomotionState = 'idle';
+          }
+        } else {
+          // Idle stance: stays at targetIdleX, planted flush on taskbar
+          currentVrm.scene.position.x += (targetIdleX - currentVrm.scene.position.x) * (1.0 - Math.exp(-4.0 * delta));
+          currentVrm.scene.position.y += (groundLevelY - currentVrm.scene.position.y) * (1.0 - Math.exp(-5.0 * delta));
+          currentVrm.scene.rotation.y += (0 - currentVrm.scene.rotation.y) * (1.0 - Math.exp(-5.0 * delta));
+
+          // Autonomous idle locomotion: stretches or takes a brief stroll every ~2.5 mins
+          idleLocomotionTimer += delta;
+          if (idleLocomotionTimer > 150.0 && !isSpeaking) {
+            idleLocomotionTimer = 0;
+            if (Math.random() > 0.5) {
+              triggerLocomotionAction('stretch');
+            } else {
+              triggerLocomotionAction('walk');
+              setTimeout(() => { if (locomotionState === 'walk') triggerLocomotionAction('idle'); }, 9000);
+            }
+          }
+        }
+
+        // Apply smooth exponential damping to legs, knees and feet
+        smoothDampEuler(leftUpperLeg, tLLegX, tLLegY, tLLegZ, legSpeed, delta);
+        smoothDampEuler(rightUpperLeg, tRLegX, tRLegY, tRLegZ, legSpeed, delta);
+        if (leftLowerLeg) smoothDampEuler(leftLowerLeg, tLKneeX, tLKneeY, tLKneeZ, legSpeed, delta);
+        if (rightLowerLeg) smoothDampEuler(rightLowerLeg, tRKneeX, tRKneeY, tRKneeZ, legSpeed, delta);
+        if (leftFoot) smoothDampEuler(leftFoot, tLFootX, tLFootY, tLFootZ, legSpeed, delta);
+        if (rightFoot) smoothDampEuler(rightFoot, tRFootX, tRFootY, tRFootZ, legSpeed, delta);
+
+        // Apply smooth exponential damping to arms and wrists
+        smoothDampEuler(leftArm, tLArmX, tLArmY, tLArmZ, armSpeed, delta);
+        smoothDampEuler(rightArm, tRArmX, tRArmY, tRArmZ, armSpeed, delta);
+        if (leftLowerArm) smoothDampEuler(leftLowerArm, 0, tLLowY, 0, armSpeed, delta);
+        if (rightLowerArm) smoothDampEuler(rightLowerArm, 0, tRLowY, 0, armSpeed, delta);
+        if (leftHand) smoothDampEuler(leftHand, tLHandX, tLHandY, tLHandZ, armSpeed, delta);
+        if (rightHand) smoothDampEuler(rightHand, tRHandX, tRHandY, tRHandZ, armSpeed, delta);
+
+        // Update all finger joints (resting curl cascade, emotional splay, speech flutter)
+        updateFingerPoses(delta, time, isSpeaking, phonemes.level, currentEmotion, touchState);
+
+        // ── 5. Viseme Blendshapes & Micro-Expressions ──
+        const expr = currentVrm.expressionManager;
+        if (expr) {
+          expr.setValue('aa', phonemes.aa);
+          expr.setValue('oh', phonemes.oh);
+          expr.setValue('ih', phonemes.ih);
+          expr.setValue('ee', phonemes.ee);
+          expr.setValue('ou', phonemes.ou);
+
+          // Touch & Emotion transitions
+          if (touchState === 'headpat') {
+            expr.setValue('happy', 0.95);
+            expr.setValue('relaxed', 0.85);
+            expr.setValue('blink', 0.55);
+          } else if (touchState === 'poke') {
+            expr.setValue('angry', 0.95);
+            expr.setValue('surprised', 0.70);
+          } else if (touchState === 'flustered') {
+            expr.setValue('surprised', 0.65);
+            expr.setValue('happy', 0.85);
+            expr.setValue('blink', 0.45);
+          } else {
+            // Apply blendshape weights for all standard and compound dynamic emotions
+            knownEmotions.forEach((e) => {
+              let target = (e === currentEmotion) ? 0.85 : 0.0;
+              // Handle compound VRM expressions for new dynamic emotions
+              if (currentEmotion === 'jealous') {
+                if (e === 'angry') target = 0.65;
+                if (e === 'sad') target = 0.35;
+              } else if (currentEmotion === 'flustered') {
+                if (e === 'surprised') target = 0.50;
+                if (e === 'happy') target = 0.70;
+              } else if (currentEmotion === 'smug') {
+                if (e === 'relaxed') target = 0.85;
+                if (e === 'happy') target = 0.40;
+              } else if (currentEmotion === 'caring') {
+                if (e === 'relaxed') target = 0.70;
+                if (e === 'happy') target = 0.50;
+              }
+              emotionWeights[e] += (target - emotionWeights[e]) * 0.12;
+              try { expr.setValue(e, emotionWeights[e]); } catch {}
+            });
+          }
+
+          // Natural Organic Blinking with Double-Blink support
+          blinkTimer += delta;
+          if (!isBlinking && blinkTimer > nextBlink) {
+            isBlinking = true;
+            expr.setValue('blink', 1.0);
+            isDoubleBlink = Math.random() < 0.28; // 28% chance of quick double blink
+          } else if (isBlinking) {
+            if (blinkTimer > nextBlink + 0.13) {
+              expr.setValue('blink', 0.0);
+              if (isDoubleBlink) {
+                // Brief pause before second flutter
+                if (blinkTimer > nextBlink + 0.22 && blinkTimer < nextBlink + 0.32) {
+                  expr.setValue('blink', 1.0);
+                } else if (blinkTimer >= nextBlink + 0.32) {
+                  expr.setValue('blink', 0.0);
+                  isBlinking = false;
+                  blinkTimer = 0;
+                  nextBlink = 2.5 + Math.random() * 3.8;
+                }
+              } else {
+                isBlinking = false;
+                blinkTimer = 0;
+                nextBlink = 2.5 + Math.random() * 3.8;
+              }
+            }
+          }
+        }
+
+        currentVrm.update(delta);
+      }
+
+      function updateSpeechBubblePosition() {
+        if (!currentVrm || !statusEl || !isTransparent) return;
+        const headNode = currentVrm.humanoid?.getNormalizedBoneNode('head');
+        const headWorldPos = new THREE.Vector3();
+        if (headNode) {
+          headNode.getWorldPosition(headWorldPos);
+        } else {
+          headWorldPos.set(currentVrm.scene.position.x, defaultHeadY, 0);
+        }
+        headWorldPos.y += 0.35;
+        headWorldPos.project(camera);
+        const px = (headWorldPos.x * 0.5 + 0.5) * window.innerWidth;
+        const py = (-(headWorldPos.y * 0.5) + 0.5) * window.innerHeight;
+        statusEl.style.left = `${Math.min(window.innerWidth - 120, Math.max(120, px))}px`;
+        statusEl.style.top = `${Math.max(18, py)}px`;
+        statusEl.style.transform = 'translate(-50%, -100%)';
+      }
+      updateSpeechBubblePosition();
+
+      if (controls && !isTransparent) controls.update();
+      updateSpatialAudio();
+      renderer.render(scene, camera);
+    });
+  </script>
+</body>
+</html>

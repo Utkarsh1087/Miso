@@ -1,0 +1,22 @@
+# API keys & secrets
+.env
+*.env
+
+# Packaging & dependencies
+node_modules/
+dist/
+package-lock.json
+
+# Python & environments
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Runtime files & media cache
+chat_history.json
+client/audio/*.wav
+!client/audio/.gitkeep
+screenshots/*.png
+*.tmp
+*.log

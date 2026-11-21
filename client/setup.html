@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Riko Desktop Companion - Setup</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: radial-gradient(circle at top, #1e1e2e 0%, #0f0f17 100%);
+      color: #e2e8f0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+    }
+    .titlebar {
+      height: 38px;
+      -webkit-app-region: drag;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      background: rgba(255, 255, 255, 0.03);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .titlebar-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #cbd5e1;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .titlebar-close {
+      -webkit-app-region: no-drag;
+      cursor: pointer;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      color: #94a3b8;
+      transition: background 0.15s, color 0.15s;
+    }
+    .titlebar-close:hover {
+      background: #ef4444;
+      color: white;
+    }
+    .content {
+      flex: 1;
+      padding: 24px 28px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .hero {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .hero-icon {
+      font-size: 32px;
+      background: linear-gradient(135deg, #f43f5e, #ec4899);
+      width: 52px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 14px;
+      box-shadow: 0 8px 20px rgba(244, 63, 94, 0.3);
+    }
+    .hero-text h1 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+    .hero-text p {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+    .field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .field-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+    .helper-link {
+      font-size: 11px;
+      color: #f43f5e;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .helper-link:hover {
+      text-decoration: underline;
+    }
+    input[type="text"], input[type="password"], select {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: #f8fafc;
+      font-size: 13px;
+      outline: none;
+      transition: border 0.2s, box-shadow 0.2s;
+    }
+    input[type="text"]:focus, input[type="password"]:focus, select:focus {
+      border-color: #f43f5e;
+      box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.2);
+    }
+    .btn-row {
+      margin-top: auto;
+      display: flex;
+      gap: 12px;
+      padding-top: 10px;
+    }
+    button {
+      flex: 1;
+      padding: 12px;
+      border-radius: 9px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: transform 0.1s, opacity 0.2s, box-shadow 0.2s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #f43f5e, #e11d48);
+      color: white;
+      box-shadow: 0 4px 15px rgba(244, 63, 94, 0.35);
+    }
+    .btn-primary:hover {
+      opacity: 0.95;
+      box-shadow: 0 6px 20px rgba(244, 63, 94, 0.5);
+    }
+    .btn-primary:active {
+      transform: scale(0.98);
+    }
+    .status-msg {
+      font-size: 12px;
+      text-align: center;
+      min-height: 18px;
+      font-weight: 500;
+    }
+    .status-msg.error { color: #f87171; }
+    .status-msg.success { color: #4ade80; }
+  </style>
+</head>
+<body>
+  <div class="titlebar">
+    <div class="titlebar-title">✨ Riko AI Companion Setup</div>
+    <div class="titlebar-close" id="btnClose">✕</div>
+  </div>
+
+  <div class="content">
+    <div class="hero">
+      <div class="hero-icon">🌸</div>
+      <div class="hero-text">
+        <h1>Welcome to Project Riko!</h1>
+        <p>Set up your API keys to bring your 3D desktop companion to life.</p>
+      </div>
+    </div>
+
+    <!-- Groq API Key -->
+    <div class="field-group">
+      <div class="field-header">
+        <label for="groqKey">Groq API Key (Whisper Ears & Brain)</label>
+        <span class="helper-link" id="linkGroq">Get Free Key ↗</span>
+      </div>
+      <input type="password" id="groqKey" placeholder="gsk_..." autocomplete="off" />
+    </div>
+
+    <!-- Fish Audio API Key -->
+    <div class="field-group">
+      <div class="field-header">
+        <label for="fishKey">Fish Audio API Key (Anime Voice TTS)</label>
+        <span class="helper-link" id="linkFish">Get Key ↗</span>
+      </div>
+      <input type="password" id="fishKey" placeholder="Paste your Fish Audio API Key..." autocomplete="off" />
+    </div>
+
+    <!-- Microphone Selection -->
+    <div class="field-group">
+      <label for="micSelect">Preferred Microphone</label>
+      <select id="micSelect">
+        <option value="default">Default System Microphone</option>
+      </select>
+    </div>
+
+    <!-- Companion Stance / Wake Word Mode -->
+    <div class="field-group">
+      <label for="modeSelect">Listening Mode</label>
+      <select id="modeSelect">
+        <option value="hands-free">Hands-Free (Auto-detects when you speak)</option>
+        <option value="wake-word">Wake-Word Only (Responds when you say "Hey Riko")</option>
+      </select>
+    </div>
+
+    <div class="status-msg" id="statusMsg"></div>
+
+    <div class="btn-row">
+      <button class="btn-primary" id="btnLaunch">Save & Launch Riko</button>
+    </div>
+  </div>
+
+  <script>
+    const groqInput = document.getElementById('groqKey');
+    const fishInput = document.getElementById('fishKey');
+    const micSelect = document.getElementById('micSelect');
+    const modeSelect = document.getElementById('modeSelect');
+    const btnLaunch = document.getElementById('btnLaunch');
+    const btnClose = document.getElementById('btnClose');
+    const statusMsg = document.getElementById('statusMsg');
+
+    // Populate Microphones list
+    async function loadMicrophones() {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const mics = devices.filter(d => d.kind === 'audioinput');
+        if (mics.length > 0) {
+          micSelect.innerHTML = '<option value="default">Default System Microphone</option>';
+          mics.forEach((m, idx) => {
+            const opt = document.createElement('option');
+            opt.value = m.label || `Microphone ${idx + 1}`;
+            opt.textContent = m.label || `Microphone ${idx + 1}`;
+            micSelect.appendChild(opt);
+          });
+        }
+      } catch (e) {
+        console.warn('Could not list mics:', e);
+      }
+    }
+    loadMicrophones();
+
+    // Load existing settings if saved
+    if (window.electronAPI && window.electronAPI.loadSettings) {
+      window.electronAPI.loadSettings().then(cfg => {
+        if (!cfg) return;
+        if (cfg.GROQ_API_KEY) groqInput.value = cfg.GROQ_API_KEY;
+        if (cfg.FISH_API_KEY) fishInput.value = cfg.FISH_API_KEY;
+        if (cfg.mic) micSelect.value = cfg.mic;
+        if (cfg.mode) modeSelect.value = cfg.mode;
+      });
+    }
+
+    document.getElementById('linkGroq').onclick = () => {
+      if (window.electronAPI && window.electronAPI.openExternal) {
+        window.electronAPI.openExternal('https://console.groq.com/keys');
+      }
+    };
+    document.getElementById('linkFish').onclick = () => {
+      if (window.electronAPI && window.electronAPI.openExternal) {
+        window.electronAPI.openExternal('https://fish.audio/app/api-keys/');
+      }
+    };
+
+    btnClose.onclick = () => {
+      if (window.electronAPI && window.electronAPI.closeSetup) {
+        window.electronAPI.closeSetup();
+      }
+    };
+
+    btnLaunch.onclick = async () => {
+      const groqKey = groqInput.value.trim();
+      const fishKey = fishInput.value.trim();
+
+      if (!groqKey) {
+        statusMsg.className = 'status-msg error';
+        statusMsg.textContent = 'Please enter your Groq API Key!';
+        return;
+      }
+      if (!fishKey) {
+        statusMsg.className = 'status-msg error';
+        statusMsg.textContent = 'Please enter your Fish Audio API Key!';
+        return;
+      }
+
+      statusMsg.className = 'status-msg';
+      statusMsg.textContent = 'Saving configuration and starting Riko...';
+
+      if (window.electronAPI && window.electronAPI.saveSettingsAndLaunch) {
+        const res = await window.electronAPI.saveSettingsAndLaunch({
+          GROQ_API_KEY: groqKey,
+          FISH_API_KEY: fishKey,
+          mic: micSelect.value,
+          mode: modeSelect.value
+        });
+        if (res && res.error) {
+          statusMsg.className = 'status-msg error';
+          statusMsg.textContent = res.error;
+        }
+      }
+    };
+  </script>
+</body>
+</html>
+

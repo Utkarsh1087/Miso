@@ -1,0 +1,52 @@
+{
+  "name": "riko-desktop-companion",
+  "version": "1.0.0",
+  "description": "Riko - 3D AI Anime Desktop Pet & Companion",
+  "main": "electron_pet.js",
+  "scripts": {
+    "start": "electron electron_pet.js",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.riko.companion",
+    "productName": "Riko 3D Companion",
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Riko 3D Companion"
+    },
+    "files": [
+      "electron_pet.js",
+      "preload.js",
+      "main.py",
+      "character_config.yaml",
+      "profile.json",
+      "riko/**/*",
+      "client/**/*",
+      "character_files/**/*",
+      "!**/*.pyc",
+      "!**/__pycache__"
+    ],
+    "directories": {
+      "output": "dist"
+    }
+  },
+  "keywords": [
+    "ai",
+    "desktop-pet",
+    "vrm",
+    "companion"
+  ],
+  "author": "Utkarsh",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^24.8.8",
+    "electron-builder": "^24.13.3"
+  }
+}
