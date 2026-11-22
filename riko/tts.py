@@ -120,6 +120,9 @@ def _fish(text, f):
     if f.get("voice_id"):
         body["reference_id"] = f["voice_id"]
     
+    speed = float(f.get("speed", 0.88))
+    body["prosody"] = {"speed": speed}
+    
     headers = {
         "Authorization": f"Bearer {os.getenv('FISH_API_KEY')}",
         "model": f.get("model", "s2.1-pro")
