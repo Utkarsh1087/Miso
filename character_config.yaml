@@ -92,6 +92,15 @@ groq_model: openai/gpt-oss-120b # flagship 120B parameter model: witty, expressi
 proactive_interval: 600      # seconds of silence before Riko initiates observation/check-in (10 mins)
 proactive_vision: true   # lets Riko look at your screen or camera during proactive check-ins to comment on what you're doing
 
+# ── Parallel Continuous Vision Observer ──────────────────────
+# Watches webcam in background, logs important actions into short-term memory,
+# and lets LLM decide whether to comment without interrupting ongoing conversation.
+vision_observer:
+  enabled: true             # parallel background camera observer
+  motion_threshold: 0.08    # sensitivity (0.05 = sensitive, 0.12 = big movement)
+  cooldown: 60              # minimum seconds between spontaneous spoken comments
+  auto_react: true          # whether LLM can proactively comment out loud or keep silent in memory
+
 # ── Her voice (text to speech) ───────────────────────────────
 # sovits = GPT-SoVITS, runs on your PC (start its API server first)
 # fish   = Fish Audio, online, needs FISH_API_KEY in .env

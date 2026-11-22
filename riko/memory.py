@@ -1,10 +1,52 @@
 """Long-term persistent diary memory & Affection Meter for Riko (profile.json)."""
 import json
 import re
+import threading
+import time
 
 from riko.config import ROOT
 
 PROFILE_PATH = ROOT / "profile.json"
+
+# ── Short-Term Visual Working Memory Buffer ──
+_visual_events: list[dict] = []
+_visual_lock = threading.RLock()
+
+
+def add_visual_event(description: str):
+    """Records a recent visual observation into the transient short-term working memory."""
+    global _visual_events
+    with _visual_lock:
+        now = time.time()
+        _visual_events.append({"timestamp": now, "description": description.strip()})
+        # Keep only the last 10 events within the past 15 minutes
+        _visual_events = [e for e in _visual_events if now - e["timestamp"] < 900][-10:]
+        print(f"[visual memory] Observed: '{description.strip()}'")
+
+
+def get_recent_visual_events(max_age_seconds: int = 300) -> list[str]:
+    """Returns human-readable recent visual events from short-term memory."""
+    with _visual_lock:
+        now = time.time()
+        results = []
+        for e in _visual_events:
+            age = int(now - e["timestamp"])
+            if age <= max_age_seconds:
+                if age < 60:
+                    time_str = f"{age}s ago"
+                else:
+                    time_str = f"{age // 60}m ago"
+                results.append(f"{time_str}: {e['description']}")
+        return results
+
+
+def get_visual_context_prompt() -> str:
+    """Builds a contextual prompt snippet representing recent visual observations."""
+    events = get_recent_visual_events(300)
+    if not events:
+        return ""
+    recent_str = "; ".join(events[-3:])
+    return f"\n[Recent Visual Observations of Senpai via Webcam: {recent_str}]"
 
 
 def load_profile() -> dict:

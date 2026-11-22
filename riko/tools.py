@@ -375,21 +375,29 @@ def capture_camera_base64(max_width: int = 640) -> Optional[str]:
     """Captures a live frame from the webcam and returns a base64 JPEG string."""
     try:
         import cv2
-        cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-        if not cap.isOpened():
-            cap = cv2.VideoCapture(0)
+        frame = None
+        try:
+            from riko import vision_observer
+            frame = vision_observer.get_latest_frame()
+        except Exception:
+            pass
 
-        if not cap.isOpened():
-            print("[camera] No webcam detected.")
-            return None
+        if frame is None:
+            cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+            if not cap.isOpened():
+                cap = cv2.VideoCapture(0)
 
-        # Warm up 2 frames for auto-exposure adjustment
-        cap.read()
-        success, frame = cap.read()
-        cap.release()
+            if not cap.isOpened():
+                print("[camera] No webcam detected.")
+                return None
 
-        if not success or frame is None:
-            return None
+            # Warm up 2 frames for auto-exposure adjustment
+            cap.read()
+            success, frame = cap.read()
+            cap.release()
+
+            if not success or frame is None:
+                return None
 
         # Check facial recognition
         try:

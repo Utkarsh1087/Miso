@@ -314,8 +314,8 @@ def reply(user_text, cfg, image_b64=None, audio_bytes=None):
     # Did any Tier 1 trigger take immediate action?
     fast_action_taken = bool(mem_action or media_action or music_vibe or app_opened or game_context or avatar_context or voice_context or sentry_context or workout_context or face_context or voice_enroll_context or alarm_context or cowatch_context or locomotion_context or camera_b64 or screen_b64 or search_context)
 
-    # System prompt enriched with permanent diary memory facts
-    effective_system_prompt = cfg["system_prompt"] + memory.get_memory_context()
+    # System prompt enriched with permanent diary memory facts and recent visual observations
+    effective_system_prompt = cfg["system_prompt"] + memory.get_memory_context() + memory.get_visual_context_prompt()
 
     # Sliding window of recent messages
     context_window = history[-MAX_HISTORY_TURNS:] if len(history) > MAX_HISTORY_TURNS else history

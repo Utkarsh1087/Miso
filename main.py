@@ -13,7 +13,7 @@ import re
 import threading
 import time
 
-from riko import alarms, asr, heartbeat, hotkeys, llm, memory, telegram_bot, tts, viewer, voice_id
+from riko import alarms, asr, heartbeat, hotkeys, llm, memory, telegram_bot, tts, viewer, vision_observer, voice_id
 from riko.config import load_config
 
 
@@ -39,6 +39,7 @@ def main():
     heartbeat.start(cfg)
     telegram_bot.start_telegram_bridge(cfg)
     alarms.start(cfg)
+    vision_observer.start(cfg)
 
     # Setup global hotkeys: Ctrl+Alt+R (Screen Vision) and Ctrl+Alt+C (Camera Vision)
     def handle_hotkey_inspect():
@@ -130,18 +131,25 @@ def main():
 
     while True:
         try:
-            # Passes barge-in hook only if enabled in character_config.yaml
+            # Passes barge-in hook and flags busy so vision observer never interrupts speech
             barge_in_hook = viewer.stop_speech if cfg.get("barge_in", False) else None
-            recording = asr.record(cfg, on_speech_start=barge_in_hook)
+
+            def on_speech_detected():
+                heartbeat.set_busy(True)
+                if barge_in_hook:
+                    barge_in_hook()
+
+            recording = asr.record(cfg, on_speech_start=on_speech_detected)
             if recording is None:
+                heartbeat.set_busy(False)
                 continue
             
             text = asr.transcribe(recording, cfg)
             if not text:
+                heartbeat.set_busy(False)
                 continue
             
             print(f"\nYou: {text}", flush=True)
-            heartbeat.set_busy(True)
 
             # Wake Word Filter (optional for hands-free mode)
             if cfg.get("hands_free") and cfg.get("require_wake_word"):
