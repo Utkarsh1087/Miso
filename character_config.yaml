@@ -105,9 +105,10 @@ sovits:
   prompt_lang: en
 
 fish:
-  # Tsundere Anime Girl voice model from Fish Audio
-  voice_id: fb4598c9ac0d4c54ba75f6eb0759439d
+  # Rayen's canonical dry studio voice (zero room echo, close-mic)
+  voice_id: 98655a12fa944e26b274c535e5e03842
   # Alternative curated voice models:
+  # - Tsundere (Theatrical room acoustics): fb4598c9ac0d4c54ba75f6eb0759439d
   # - Furina (Genshin): bd08be872bc440918674af072944ba12
   # - Hu Tao (Genshin): 2879aac2931e450f8159d2f65cd918f4
   # - Anime Girl (Sweet): d8f3b4c1199f4568a767ec54112d2b17
