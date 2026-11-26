@@ -31,7 +31,7 @@ def main():
         cfg["hands_free"] = True
 
     mode = "hands-free" if cfg.get("hands_free") else "push-to-talk"
-    print(f"\n=== Riko  |  model: {cfg['model']}  |  ears: {cfg['asr']} ({mode})  |  voice: {cfg['tts']} ===")
+    print(f"\n=== Miso  |  model: {cfg['model']}  |  ears: {cfg['asr']} ({mode})  |  voice: {cfg['tts']} ===")
     llm.check(cfg)
     asr.check(cfg)
     tts.check(cfg)
@@ -55,7 +55,7 @@ def main():
                 clean_answer = raw_answer[match.end():]
             else:
                 clean_answer = raw_answer
-            print(f"[{emotion.upper()}] Riko: {clean_answer}")
+            print(f"[{emotion.upper()}] Miso: {clean_answer}")
             viewer.play(tts.speak(clean_answer, cfg), emotion=emotion)
         except Exception as e:
             print(f"[hotkey error] {e}")
@@ -73,7 +73,7 @@ def main():
                 clean_answer = raw_answer[match.end():]
             else:
                 clean_answer = raw_answer
-            print(f"[{emotion.upper()}] Riko: {clean_answer}")
+            print(f"[{emotion.upper()}] Miso: {clean_answer}")
             viewer.play(tts.speak(clean_answer, cfg), emotion=emotion)
         except Exception as e:
             print(f"[hotkey error] {e}")
@@ -121,7 +121,7 @@ def main():
             memory.record_greeting(clean_answer)
             memory.update_session_active()
 
-            print(f"\nRiko (startup): [{emotion.upper()}] {clean_answer}\n", flush=True)
+            print(f"\nMiso (startup): [{emotion.upper()}] {clean_answer}\n", flush=True)
             wav_path = tts.speak(clean_answer, cfg)
             viewer.play(wav_path, emotion=emotion)
         except Exception as e:
@@ -154,7 +154,7 @@ def main():
             # Wake Word Filter (optional for hands-free mode)
             if cfg.get("hands_free") and cfg.get("require_wake_word"):
                 lower_text = text.lower()
-                wake_names = ["riko", "riku", "reiko", "hey riko", "hi riko", "ok riko"]
+                wake_names = ["miso", "meeso", "hey miso", "hi miso", "ok miso", "riko", "riku"]
                 if not any(w in lower_text for w in wake_names):
                     heartbeat.set_busy(False)
                     continue
@@ -192,7 +192,7 @@ def main():
                 clean_answer = fb_text
                 emotion = fb_emo
 
-            print(f"Riko: [{emotion.upper()}] {clean_answer}\n", flush=True)
+            print(f"Miso: [{emotion.upper()}] {clean_answer}\n", flush=True)
             memory.update_session_active()
 
             wav_path = tts.speak(clean_answer, cfg)

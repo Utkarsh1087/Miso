@@ -135,19 +135,19 @@ def _analyze_and_alert(image_b64: str, cfg: dict, person_status: str = ""):
 
         if "senpai_recognized" in person_status:
             prompt = (
-                "You are Riko, an arrogant, sharp-witted anime desktop companion. "
+                "You are Miso, an arrogant, sharp-witted anime desktop companion. "
                 "You just noticed your creator (Utkarsh) return to his desk! "
                 "Welcome him back in 1 short, deadpan, witty sentence with zero tildes or forced giggles. Start with [relaxed] or [happy]!"
             )
         elif "stranger_detected" in person_status:
             prompt = (
-                "You are Riko, an AI guarding Utkarsh's computer. "
+                "You are Miso, an AI guarding Utkarsh's computer. "
                 "An UNFAMILIAR STRANGER just approached the desk! "
                 "Sound a sharp, witty warning in 1 short punchy sentence telling them to step away from senpai's PC. Start with [angry] or [surprised]!"
             )
         else:
             prompt = (
-                "You are Riko, an arrogant, sharp-witted anime desktop companion. "
+                "You are Miso, an arrogant, sharp-witted anime desktop companion. "
                 "You just caught motion on the camera in the room. Give a witty, deadpan 1-sentence observation on whatever is happening without tildes or robotic fillers. Start with [surprised], [happy], or [neutral]!"
             )
 
@@ -192,7 +192,7 @@ def _analyze_and_alert(image_b64: str, cfg: dict, person_status: str = ""):
             else:
                 clean_text = reply_text
 
-            print(f"[sentry alert] Riko: {clean_text} [{emotion}]")
+            print(f"[sentry alert] Miso: {clean_text} [{emotion}]")
             wav = tts.speak(clean_text, cfg, filename="sentry_alert.wav")
             viewer.play(wav, emotion=emotion)
     except Exception as e:

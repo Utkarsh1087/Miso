@@ -39,8 +39,8 @@ def clean_for_speech(text: str) -> str:
     t = re.sub(r"\[[^\]]+\]", "", t).strip()
     # Strip forced anime filler noises that distort vocal register
     t = re.sub(r"(?i)\b(fufu+|fu-fu+|ara\s+ara)\b~*", "", t)
-    # Strip emojis (Fish Audio phonetically pronounces emoji names like 'smiling face')
-    t = re.sub(r"[\U00010000-\U0010ffff]", "", t)
+    # Strip emojis (Fish Audio phonetically pronounces emoji names like 'smiling face' or 'sparkles')
+    t = re.sub(r"[\u2600-\u27BF\U00010000-\U0010FFFF]", "", t)
     # Strip asterisks & markdown formatting
     t = re.sub(r"[\*\_#`]+", "", t)
     # Strip musical notes & unpronounceable symbol spam
@@ -49,12 +49,17 @@ def clean_for_speech(text: str) -> str:
     t = re.sub(r"\b([A-Za-z])-(?:[A-Za-z]-)+", r"\1-", t)
     # Convert trailing dots that cause slow speech down to natural breath commas
     t = re.sub(r"\.{2,}", ", ", t)
-    # CRITICAL: Strip tildes (~) completely so Fish Audio speaks naturally without singing pitch glides / vowel drag
-    t = t.replace("~", "")
+    # CRITICAL: Strip ALL tildes (~, ～, 〜) so Fish Audio speaks naturally without singing pitch glides / vowel drag
+    t = re.sub(r"[~～〜]+", "", t)
     # Collapse repetitive character spam (e.g. "......" -> "...")
     t = re.sub(r"(.)\1{3,}", r"\1\1", t)
     # Collapse repeating word spam (e.g. "la la la la la la" -> "la la")
     t = re.sub(r"(\b\w+\b)(?:\s+\1){3,}", r"\1 \1", t, flags=re.IGNORECASE)
+    # Deduplicate repetitive 'senpai' tokens (allow at most one per utterance)
+    t = re.sub(r"(?i)\bsenpai\b[,\s]*(?=.*\bsenpai\b)", "", t)
+    t = re.sub(r"^[,\s]+", "", t)
+    t = re.sub(r",\s*,+", ",", t)
+    t = re.sub(r",\s*([.!?])", r"\1", t)
     t = re.sub(r"\s+", " ", t).strip()
     # Length guard: prevents runaway TTS requests (>280 chars)
     if len(t) > 280:

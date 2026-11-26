@@ -481,15 +481,15 @@ def detect_minigame(text: str) -> Optional[str]:
                 break
         riko_choice = random.choice(["rock", "paper", "scissors"])
         if not user_choice:
-            return f"Riko challenges you: 'I choose {riko_choice.upper()}! What is your move, senpai?'"
+            return f"Miso challenges you: 'I choose {riko_choice.upper()}! What is your move, senpai?'"
 
         if user_choice == riko_choice:
             return f"Both chose {riko_choice}! It's a draw! Great minds think alike, senpai."
         win_conditions = {"rock": "scissors", "paper": "rock", "scissors": "paper"}
         if win_conditions[user_choice] == riko_choice:
-            return f"Senpai chose {user_choice} and Riko chose {riko_choice}. Senpai won! Pure luck, obviously!"
+            return f"Senpai chose {user_choice} and Miso chose {riko_choice}. Senpai won! Pure luck, obviously!"
         else:
-            return f"Senpai chose {user_choice} and Riko chose {riko_choice}. Riko won! Hehe, bow to my supremacy, senpai!"
+            return f"Senpai chose {user_choice} and Miso chose {riko_choice}. Miso won! Bow to my supremacy!"
 
     # 2. Coin Flip
     if any(k in t for k in ["flip a coin", "coin flip", "heads or tails", "toss a coin"]):

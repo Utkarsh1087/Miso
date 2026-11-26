@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Riko Desktop Pet</title>
+  <title>Miso Desktop Pet</title>
   <link rel="icon" href="data:,">
   <script>
     const urlParams = new URLSearchParams(window.location.search);
@@ -173,7 +173,7 @@
   </script>
 </head>
 <body>
-  <div id="drag-header" class="pywebview-drag-region" title="Drag anywhere here to move Riko">
+  <div id="drag-header" class="pywebview-drag-region" title="Drag anywhere here to move Miso">
     <div class="drag-handle-pill">✥ Drag Window</div>
   </div>
   <div id="start">
@@ -254,7 +254,7 @@
           startOverlay.style.opacity = '0';
           setTimeout(() => startOverlay.remove(), 300);
         }
-        statusEl.textContent = '● Listening for Riko...';
+        statusEl.textContent = '● Listening for Miso...';
         setInterval(checkForVoice, 150);
       }
     }
@@ -312,7 +312,7 @@
         emotionResetTimer = setTimeout(() => {
           currentEmotion = 'neutral';
         }, 1800);
-        statusEl.textContent = '● Listening for Riko...';
+        statusEl.textContent = '● Listening for Miso...';
         fetch('/done', { method: 'POST' }).catch(() => {});
         return;
       }
@@ -323,7 +323,7 @@
       initAudio();
       currentEmotion = nextChunk.emotion || 'neutral';
       voice.src = nextChunk.audio;
-      statusEl.textContent = `🔊 Riko speaking... [${currentEmotion}]`;
+      statusEl.textContent = `🔊 Miso speaking... [${currentEmotion}]`;
       voice.play().catch(err => {
         console.warn('Playback error:', err);
         playNextSpeechChunk();
@@ -353,7 +353,7 @@
           voice.currentTime = 0;
           isPlayingSpeech = false;
           currentEmotion = 'neutral';
-          statusEl.textContent = '● Listening for Riko...';
+          statusEl.textContent = '● Listening for Miso...';
           return;
         }
 
@@ -667,7 +667,7 @@
           voice.pause();
           voice.currentTime = 0;
           fetch('/interrupted', { method: 'POST' }).catch(() => {});
-          statusEl.textContent = '● Listening for Riko...';
+          statusEl.textContent = '● Listening for Miso...';
         }
       }
       if (e.key === 'm' || e.key === 'M') {

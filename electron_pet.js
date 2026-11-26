@@ -36,7 +36,7 @@ function startBackendServer() {
   if (backendProcess) return;
 
   const args = ['main.py', '--hands-free'];
-  console.log('[electron] Spawning Riko Python backend engine...');
+  console.log('[electron] Spawning Miso Python backend engine...');
 
   // Use python from active virtualenv if present, otherwise system python
   const venvPythonWin = path.join(__dirname, '.venv', 'Scripts', 'python.exe');
@@ -292,7 +292,7 @@ function createMainWindow() {
 
   // Auto-reconnect if Electron launches before Python server is fully listening
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
-    console.log(`[electron] Waiting for Riko server at ${validatedURL} (${errorDescription})... Retrying in 1.5s`);
+    console.log(`[electron] Waiting for Miso server at ${validatedURL} (${errorDescription})... Retrying in 1.5s`);
     setTimeout(() => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.loadURL('http://127.0.0.1:8080/?transparent=true');
@@ -301,7 +301,7 @@ function createMainWindow() {
   });
 
   mainWindow.webContents.on('did-finish-load', () => {
-    console.log('[electron] Connected to Riko 3D Pet viewport.');
+    console.log('[electron] Connected to Miso 3D Pet viewport.');
   });
 
   mainWindow.webContents.on('console-message', (event, ...args) => {
@@ -366,7 +366,7 @@ function createTray() {
     return;
   }
   const contextMenu = Menu.buildFromTemplate([
-    { label: '✨ Riko Desktop Companion', enabled: false },
+    { label: '✨ Miso Desktop Companion', enabled: false },
     { type: 'separator' },
     { label: '⚙ Settings / API Keys', click: () => createSetupWindow() },
     { label: '🎯 Recenter on Screen', click: () => {
@@ -376,12 +376,12 @@ function createTray() {
       }
     }},
     { type: 'separator' },
-    { label: '❌ Exit Riko', click: () => {
+    { label: '❌ Exit Miso', click: () => {
       app.isQuitting = true;
       app.quit();
     }}
   ]);
-  tray.setToolTip('Riko 3D Companion');
+  tray.setToolTip('Miso 3D Companion');
   tray.setContextMenu(contextMenu);
 }
 

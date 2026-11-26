@@ -172,7 +172,7 @@ def _evaluate_visual_event(image_b64: str, cfg: dict, speech_cooldown: float, au
         return
 
     prompt = (
-        "You are the visual observer for an AI desktop companion named Riko watching senpai (Utkarsh) through the webcam.\n"
+        "You are the visual observer for an AI desktop companion named Miso watching senpai (Utkarsh) through the webcam.\n"
         "Look at this image and output EXACTLY two lines in this format:\n"
         "DESCRIPTION: <1 short factual phrase of what senpai is doing, e.g. 'Utkarsh took a drink of water', 'Utkarsh stood up', 'Utkarsh returned to desk', 'Utkarsh is holding an object', 'Utkarsh is resting head'>\n"
         "ACTION: <either '[SILENT]' if it is normal/mundane/unimportant, OR '[SPEAK: <emotion>] <1 short deadpan snarky comment>' if it is noteworthy, funny, or teasing-worthy without any tildes (~)>"
@@ -245,3 +245,4 @@ def _evaluate_visual_event(image_b64: str, cfg: dict, speech_cooldown: float, au
 
     except Exception as e:
         print(f"[vision observer note] {e}")
+

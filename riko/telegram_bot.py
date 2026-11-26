@@ -33,7 +33,7 @@ def _telegram_loop(token: str, cfg: dict):
             print(f"[telegram error] Invalid token: {me}")
             return
         bot_name = me.get("result", {}).get("username")
-        print(f"[telegram] Connected! Chat with Riko on Telegram: @{bot_name}")
+        print(f"[telegram] Connected! Chat with Miso on Telegram: @{bot_name}")
     except Exception as e:
         print(f"[telegram connection error] {e}")
         return
@@ -82,7 +82,7 @@ def _telegram_loop(token: str, cfg: dict):
                         photo_bytes = requests.get(photo_url).content
                         import base64
                         photo_b64 = base64.b64encode(photo_bytes).decode('utf-8')
-                        user_text = msg.get("caption") or "Look at this photo I just took on my phone! Give me your reaction, Riko!"
+                        user_text = msg.get("caption") or "Look at this photo I just took on my phone! Give me your reaction, Miso!"
                         print(f"[telegram:photo] Senpai sent a photo: {user_text}")
 
                 if not user_text:

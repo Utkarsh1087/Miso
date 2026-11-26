@@ -63,7 +63,7 @@ def start(cfg):
                     mark_interaction()
                     continue
 
-                print("\n[heartbeat] Senpai has been working quietly. Riko initiating visual check-in...")
+                print("\n[heartbeat] Senpai has been working quietly. Miso initiating visual check-in...")
                 try:
                     mark_interaction()
                     import random
@@ -92,7 +92,7 @@ def start(cfg):
                     else:
                         clean_answer = raw_answer
 
-                    print(f"[{emotion.upper()}] Riko (proactive observation): {clean_answer}")
+                    print(f"[{emotion.upper()}] Miso (proactive observation): {clean_answer}")
                     wav = tts.speak(clean_answer, cfg)
                     viewer.play(wav, emotion=emotion)
                 except Exception as e:

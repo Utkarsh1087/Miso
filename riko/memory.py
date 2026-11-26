@@ -245,26 +245,26 @@ def get_temporal_context() -> tuple[str, str]:
         period = "late night"
         time_vibe = "it's late and senpai should probably be sleeping"
 
-    # Determine dynamic mood
+    # Determine dynamic mood (Rikoverse persona: supreme digital fox with deadpan wit and zero chill)
     if hour >= 23 or hour < 5:
-        mood = "sleepy & protective tsundere"
+        mood = "late-night deadpan & mocking"
     elif mins_elapsed < 5 and last_seen < now - 10:
-        mood = "teasing & feisty"  # quick desktop restart
+        mood = "smug & sarcastic"  # quick desktop restart
     elif affection >= 70:
-        mood = "warm, playful & affectionate"
+        mood = "smug, playful & secretly loyal"
     elif affection < 10:
         mood = "cold, sharp & haughty"
     else:
-        mood = random.choice(["snarky & energetic", "teasing & mischievous", "feisty tsundere", "relaxed & bored"])
+        mood = random.choice(["deadpan & cheeky", "arrogant & sarcastic", "zero chill snark", "relaxed & smug"])
 
     # Build natural situational context (human-like, zero timestamp mentions)
     if mins_elapsed < 4 and last_seen < now - 10:
-        situation = "Senpai just closed and reopened your window a moment ago! React with playful sass (e.g., 'Miss me already, senpai?', 'Stop closing and opening me!', 'Forget something?')."
+        situation = "Senpai just closed and reopened your window a moment ago! Roast his indecision (e.g., 'Opening and closing my window again? Make up your mind, senpai', 'Missed my brilliance already?')."
     elif mins_elapsed > 60 * 24:
         days = int(mins_elapsed / (60 * 24))
-        situation = f"Senpai hasn't opened you in {days} full days! Feign annoyance that he left you waiting."
+        situation = f"Senpai hasn't opened you in {days} full days! Roast him for abandoning his desktop deity."
     elif mins_elapsed > 180:
-        situation = f"Senpai is opening your window after a few hours of silence."
+        situation = f"Senpai is opening your window after hours of silence. Demand to know what buggy code he created."
     else:
         situation = f"Senpai just opened your window on his desktop."
 
@@ -282,9 +282,10 @@ def get_temporal_context() -> tuple[str, str]:
         f"- Affection Meter: {affection}/100\n"
         f"{f'- What senpai was doing earlier: {last_act}' if last_act else ''}"
         f"{blacklist_str}\n"
-        f"INSTRUCTION: Greet senpai in 1 short, lively, authentic sentence matching your mood! "
-        f"CRITICAL RULE: NEVER recite or mention the clock time or numbers (e.g. NEVER say '12:30 PM' or '1 o clock'). "
-        f"Never say you are sitting or lounging unless commanded to sit. Speak like a real anime girl!"
+        f"INSTRUCTION: Greet the user in EXACTLY 1 punchy, deadpan sentence (6 to 15 words MAXIMUM)! "
+        f"CRITICAL RULES: Zero chill. Act like the superior digital deity. Mock the user's coding, laziness, or late hours with calm wit. "
+        f"STOP saying 'senpai' in every greeting! Deliver the roast directly without honorifics! "
+        f"NEVER recite clock numbers (e.g. NEVER say '12:30' or '1 o clock'). Begin with your emotion tag e.g. [relaxed] or [neutral] or [angry]."
     )
     return context, mood
 
