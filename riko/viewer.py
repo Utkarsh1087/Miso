@@ -29,6 +29,14 @@ def is_playing() -> bool:
 
 
 class _Handler(SimpleHTTPRequestHandler):
+    extensions_map = {
+        **SimpleHTTPRequestHandler.extensions_map,
+        ".js": "application/javascript",
+        ".mjs": "application/javascript",
+        ".vrm": "application/octet-stream",
+        ".vrma": "application/octet-stream",
+    }
+
     def end_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")

@@ -6,6 +6,12 @@
   <title>Miso Desktop Pet</title>
   <link rel="icon" href="data:,">
   <script>
+    window.addEventListener('error', (e) => {
+      console.error('[frontend error]', e.message, e.filename, e.lineno);
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+      console.error('[frontend unhandled rejection]', e.reason);
+    });
     const urlParams = new URLSearchParams(window.location.search);
     const isTransparent = urlParams.get('transparent') === 'true' || Boolean(window.pywebview);
     if (isTransparent) {

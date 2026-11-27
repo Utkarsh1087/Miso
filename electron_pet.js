@@ -320,8 +320,8 @@ function createMainWindow() {
     const level = (event && typeof event.level === 'number') ? event.level : args[0];
     const message = (event && typeof event.message === 'string') ? event.message : args[1];
     if (message && message.includes('Electron Security Warning')) return;
-    if (level === 3) {
-      console.log(`[renderer error] ${message}`);
+    if (level >= 2) {
+      console.log(`[renderer] ${message}`);
     }
   });
 
