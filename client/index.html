@@ -446,6 +446,7 @@
     }
 
     let defaultHeadY = 1.35;
+    let restHipsPosition = null;
     let screenHalfWidth = 2.5;
     let visibleHeight = 3.5;
     let targetIdleX = 1.8; // Default resting position on right side of screen
@@ -865,6 +866,11 @@
           if (headNode) headNode.getWorldPosition(headPos);
           defaultHeadY = (headPos.y > 0.5) ? headPos.y : 1.35;
 
+          const hipsNode = vrm.humanoid?.getNormalizedBoneNode('hips');
+          if (hipsNode) {
+            restHipsPosition = hipsNode.position.clone();
+          }
+
           recalibrateCamera();
 
           if (isTransparent) {
@@ -1155,7 +1161,7 @@
 
         if (vrmaOwnsBones) {
           mixer.update(delta);
-          if (hips) hips.position.set(0, 0, 0);
+          if (hips && restHipsPosition) hips.position.copy(restHipsPosition);
           currentVrm.scene.position.x += (targetIdleX - currentVrm.scene.position.x) * (1.0 - Math.exp(-4.0 * delta));
           currentVrm.scene.position.y += (groundLevelY - currentVrm.scene.position.y) * (1.0 - Math.exp(-5.0 * delta));
           currentVrm.scene.rotation.y += (0 - currentVrm.scene.rotation.y) * (1.0 - Math.exp(-5.0 * delta));
@@ -1177,7 +1183,13 @@
           if (hips) {
             hips.rotation.z = weightCycle * 0.045; // Natural hip tilt (2.6 deg)
             hips.rotation.y = Math.cos(time * 0.35) * 0.035;
-            hips.position.x = weightCycle * 0.022; // Weight shifts between feet
+            if (restHipsPosition) {
+              hips.position.set(
+                restHipsPosition.x + weightCycle * 0.022,
+                restHipsPosition.y,
+                restHipsPosition.z
+              );
+            }
           }
 
           // Sinusoidal organic breathing across spine, chest and shoulders
