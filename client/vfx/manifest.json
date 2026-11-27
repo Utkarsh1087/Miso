@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "effects": {
+    "anger_vein": {
+      "image": "anger_vein.png",
+      "flipbook": { "columns": 2, "rows": 2, "frames": 4, "fps": 8, "loop": "loop" },
+      "anchor": "forehead_left",
+      "offset": [-0.048, 0.055, 0.095],
+      "size": 0.068,
+      "rotationDeg": 0,
+      "pulseHz": 1.6,
+      "pulseAmp": 0.1
+    },
+    "blush_lines": {
+      "image": "blush_lines.png",
+      "intensityImages": { "3": "blush_deep.png" },
+      "flipbook": null,
+      "anchor": "cheeks",
+      "mirror": true,
+      "offset": [0.045, -0.024, 0.092],
+      "size": 0.048,
+      "rotationDeg": 0
+    },
+    "sparkles": {
+      "image": "sparkles.png",
+      "flipbook": null,
+      "anchor": "head",
+      "offset": [-0.12, 0.18, 0.12],
+      "size": 0.115,
+      "rotationDeg": 0,
+      "bobHz": 1.2,
+      "bobAmp": 0.012
+    },
+    "sweatdrop": {
+      "image": "sweatdrop.png",
+      "flipbook": { "columns": 2, "rows": 2, "frames": 4, "fps": 10, "loop": "pingpong" },
+      "anchor": "forehead_right",
+      "offset": [0.052, 0.055, 0.095],
+      "size": 0.062,
+      "rotationDeg": -12,
+      "slideY": -0.022,
+      "slidePeriod": 2.8
+    },
+    "gloom_lines": {
+      "image": "gloom_lines.png",
+      "flipbook": { "columns": 3, "rows": 2, "frames": 6, "fps": 12, "loop": "once" },
+      "anchor": "forehead_center",
+      "offset": [0.0, 0.032, 0.098],
+      "size": 0.095,
+      "rotationDeg": 0,
+      "slideY": -0.014,
+      "slidePeriod": 0.6
+    },
+    "shock_marks": {
+      "image": "shock_marks.png",
+      "flipbook": { "columns": 3, "rows": 2, "frames": 6, "fps": 20, "loop": "once" },
+      "anchor": "head",
+      "offset": [-0.16, 0.19, 0.08],
+      "size": 0.105,
+      "rotationDeg": 0
+    },
+    "heart_pop": {
+      "image": "heart_pop.png",
+      "flipbook": { "columns": 2, "rows": 2, "frames": 4, "fps": 10, "loop": "once" },
+      "anchor": "head",
+      "offset": [0.135, 0.14, 0.06],
+      "size": 0.085,
+      "rotationDeg": -8,
+      "bobHz": 1.1,
+      "bobAmp": 0.01
+    },
+    "kira_star": {
+      "image": "kira_star.png",
+      "flipbook": { "columns": 2, "rows": 2, "frames": 4, "fps": 8, "loop": "loop" },
+      "anchor": "head",
+      "offset": [-0.105, 0.13, 0.11],
+      "size": 0.072,
+      "rotationDeg": 0
+    },
+    "annoyed_scribble": {
+      "image": "annoyed_scribble.png",
+      "flipbook": { "columns": 3, "rows": 1, "frames": 3, "fps": 8, "loop": "loop" },
+      "anchor": "head",
+      "offset": [-0.13, 0.195, 0.04],
+      "size": 0.09,
+      "rotationDeg": 6
+    },
+    "gloomy_cloud": {
+      "image": "gloomy_cloud.png",
+      "flipbook": { "columns": 4, "rows": 1, "frames": 4, "fps": 4, "loop": "loop" },
+      "anchor": "head",
+      "offset": [0.0, 0.27, 0.0],
+      "size": 0.13,
+      "rotationDeg": 0
+    }
+  }
+}

@@ -3,13 +3,12 @@ Connects Riko to Telegram via standard HTTP polling (0 extra dependencies).
 Allows senpai to talk to Riko from anywhere in the world via Telegram voice notes or photos!
 """
 import os
-import re
 import threading
 import time
 
 import requests
 
-from riko import asr, llm, tts
+from riko import asr, llm, tags, tts
 
 
 def start_telegram_bridge(cfg: dict):
@@ -90,8 +89,8 @@ def _telegram_loop(token: str, cfg: dict):
 
                 # Generate Riko's reply using shared memory brain & vision
                 raw_reply = llm.reply(user_text, cfg, image_b64=photo_b64)
-                m = re.match(r"^\[([a-zA-Z]+)\]\s*", raw_reply)
-                clean_reply = raw_reply[m.end():] if m else raw_reply
+                parsed = tags.parse_reply_tags(raw_reply)
+                clean_reply = parsed.clean_text
 
                 # Send text reply
                 requests.post(f"{base_url}/sendMessage", json={

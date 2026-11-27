@@ -105,7 +105,7 @@ def start_proactive_face_greeting(cfg: dict):
 
     import threading
     import time
-    from riko import llm, tts, viewer
+    from riko import llm, tags, tts, viewer
 
     def watcher_loop():
         last_greet_time = 0.0
@@ -146,19 +146,10 @@ def start_proactive_face_greeting(cfg: dict):
                             "You see senpai through the webcam! Greet senpai in 1 sassy, playful tsundere sentence and tease him to say 'remember my face' so you can officially register his face!]"
                         )
                         raw_answer = llm.reply(prompt, cfg)
-                        import re
-                        emotion = "happy"
-                        match = re.match(r"^\[([a-zA-Z]+)\]\s*", raw_answer)
-                        if match:
-                            tag = match.group(1).lower()
-                            if tag in ["happy", "angry", "sad", "surprised", "relaxed", "neutral"]:
-                                emotion = tag
-                            clean_answer = raw_answer[match.end():]
-                        else:
-                            clean_answer = raw_answer
-                        print(f"[{emotion.upper()}] Riko (camera): {clean_answer}")
-                        wav = tts.speak(clean_answer, cfg)
-                        viewer.play(wav, emotion=emotion)
+                        parsed = tags.parse_reply_tags(raw_answer, default_emotion="happy")
+                        print(f"[{parsed.emotion.upper()}:{parsed.intensity}] Riko (camera): {parsed.clean_text}")
+                        wav = tts.speak(parsed.clean_text, cfg)
+                        viewer.play(wav, emotion=parsed.emotion, intensity=parsed.intensity, gesture=parsed.gesture, text=parsed.clean_text)
                     else:
                         senpai_was_present = True
 
@@ -173,19 +164,10 @@ def start_proactive_face_greeting(cfg: dict):
                             "Proactively greet senpai first in 1 short, witty, sassy tsundere sentence!]"
                         )
                         raw_answer = llm.reply(prompt, cfg)
-                        import re
-                        emotion = "happy"
-                        match = re.match(r"^\[([a-zA-Z]+)\]\s*", raw_answer)
-                        if match:
-                            tag = match.group(1).lower()
-                            if tag in ["happy", "angry", "sad", "surprised", "relaxed", "neutral"]:
-                                emotion = tag
-                            clean_answer = raw_answer[match.end():]
-                        else:
-                            clean_answer = raw_answer
-                        print(f"[{emotion.upper()}] Riko (camera): {clean_answer}")
-                        wav = tts.speak(clean_answer, cfg)
-                        viewer.play(wav, emotion=emotion)
+                        parsed = tags.parse_reply_tags(raw_answer, default_emotion="happy")
+                        print(f"[{parsed.emotion.upper()}:{parsed.intensity}] Riko (camera): {parsed.clean_text}")
+                        wav = tts.speak(parsed.clean_text, cfg)
+                        viewer.play(wav, emotion=parsed.emotion, intensity=parsed.intensity, gesture=parsed.gesture, text=parsed.clean_text)
                     else:
                         senpai_was_present = True
 
@@ -199,19 +181,10 @@ def start_proactive_face_greeting(cfg: dict):
                             "Challenge the stranger suspiciously in 1 short sentence: 'Who are you?! Where is senpai?!']"
                         )
                         raw_answer = llm.reply(prompt, cfg)
-                        import re
-                        emotion = "surprised"
-                        match = re.match(r"^\[([a-zA-Z]+)\]\s*", raw_answer)
-                        if match:
-                            tag = match.group(1).lower()
-                            if tag in ["happy", "angry", "sad", "surprised", "relaxed", "neutral"]:
-                                emotion = tag
-                            clean_answer = raw_answer[match.end():]
-                        else:
-                            clean_answer = raw_answer
-                        print(f"[{emotion.upper()}] Riko (alert): {clean_answer}")
-                        wav = tts.speak(clean_answer, cfg)
-                        viewer.play(wav, emotion=emotion)
+                        parsed = tags.parse_reply_tags(raw_answer, default_emotion="surprised")
+                        print(f"[{parsed.emotion.upper()}:{parsed.intensity}] Riko (alert): {parsed.clean_text}")
+                        wav = tts.speak(parsed.clean_text, cfg)
+                        viewer.play(wav, emotion=parsed.emotion, intensity=parsed.intensity, gesture=parsed.gesture, text=parsed.clean_text)
 
                 elif "no_face_detected" in status:
                     senpai_was_present = False

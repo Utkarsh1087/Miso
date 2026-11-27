@@ -518,7 +518,7 @@ def detect_avatar_switch(text: str) -> Optional[str]:
 
 VOICE_PRESETS = {
     "riko": ("5b05bc2a296046b3ac67577cb787dddc", "Riko (Energetic & Sassy)"),
-    "tsundere": ("fb4598c9ac0d4c54ba75f6eb0759439d", "Tsundere Anime Girl"),
+    "tsundere": ("5b05bc2a296046b3ac67577cb787dddc", "Riko (Energetic & Sassy)"),
     "furina": ("bd08be872bc440918674af072944ba12", "Furina"),
     "hu tao": ("2879aac2931e450f8159d2f65cd918f4", "Hu Tao"),
     "sweet": ("d8f3b4c1199f4568a767ec54112d2b17", "Sweet Anime Girl"),

@@ -9,11 +9,10 @@ Run:  uv run main.py                 (uses asr / tts from character_config.yaml)
 """
 import argparse
 import datetime
-import re
 import threading
 import time
 
-from riko import alarms, asr, heartbeat, hotkeys, llm, memory, telegram_bot, tts, viewer, vision_observer, voice_id
+from riko import alarms, asr, heartbeat, hotkeys, llm, memory, tags, telegram_bot, tts, viewer, vision_observer, voice_id
 from riko.config import load_config
 
 
@@ -46,17 +45,11 @@ def main():
         print("\n[hotkey] Ctrl+Alt+R pressed! Inspecting active screen...")
         try:
             raw_answer = llm.reply("Look at my screen and give me your snarky reaction or advice in 1-2 sentences!", cfg)
-            emotion = "neutral"
-            match = re.match(r"^\[([a-zA-Z]+)\]\s*", raw_answer)
-            if match:
-                tag = match.group(1).lower()
-                if tag in ["happy", "angry", "sad", "surprised", "relaxed", "neutral"]:
-                    emotion = tag
-                clean_answer = raw_answer[match.end():]
-            else:
-                clean_answer = raw_answer
-            print(f"[{emotion.upper()}] Miso: {clean_answer}")
-            viewer.play(tts.speak(clean_answer, cfg), emotion=emotion)
+            parsed = tags.parse_reply_tags(raw_answer)
+            emotion = parsed.emotion
+            clean_answer = parsed.clean_text
+            print(f"[{emotion.upper()}:{parsed.intensity}] Miso: {clean_answer}")
+            viewer.play(tts.speak(clean_answer, cfg), emotion=emotion, intensity=parsed.intensity, gesture=parsed.gesture, text=clean_answer)
         except Exception as e:
             print(f"[hotkey error] {e}")
 
@@ -64,17 +57,11 @@ def main():
         print("\n[hotkey] Ctrl+Alt+C pressed! Looking through webcam camera at senpai...")
         try:
             raw_answer = llm.reply("Look at me through the camera and give me your snarky reaction in 1-2 sentences!", cfg)
-            emotion = "neutral"
-            match = re.match(r"^\[([a-zA-Z]+)\]\s*", raw_answer)
-            if match:
-                tag = match.group(1).lower()
-                if tag in ["happy", "angry", "sad", "surprised", "relaxed", "neutral"]:
-                    emotion = tag
-                clean_answer = raw_answer[match.end():]
-            else:
-                clean_answer = raw_answer
-            print(f"[{emotion.upper()}] Miso: {clean_answer}")
-            viewer.play(tts.speak(clean_answer, cfg), emotion=emotion)
+            parsed = tags.parse_reply_tags(raw_answer)
+            emotion = parsed.emotion
+            clean_answer = parsed.clean_text
+            print(f"[{emotion.upper()}:{parsed.intensity}] Miso: {clean_answer}")
+            viewer.play(tts.speak(clean_answer, cfg), emotion=emotion, intensity=parsed.intensity, gesture=parsed.gesture, text=clean_answer)
         except Exception as e:
             print(f"[hotkey error] {e}")
 
@@ -90,21 +77,14 @@ def main():
             prompt = (
                 f"[{temporal_ctx} "
                 f"Greet senpai in 1 short, lively, authentic sentence matching your mood and time of day! "
-                f"Do NOT repeat prior lines. Begin with your emotion tag e.g. [happy] or [relaxed] or [surprised] or [angry].]"
+                f"Do NOT repeat prior lines. Begin with [emotion:intensity] (1-3) and optional [gesture] e.g. [happy:2] or [relaxed:1].]"
             )
             raw_answer = llm.reply(prompt, cfg)
-            emotion = "happy"
-            clean_answer = ""
-
-            if raw_answer:
-                match = re.match(r"^\[([^\]]+)\]\s*", raw_answer)
-                if match:
-                    tag = match.group(1).lower().split(",")[0].strip()
-                    if tag in ["happy", "angry", "sad", "surprised", "relaxed", "neutral", "jealous", "flustered", "smug", "caring"]:
-                        emotion = tag
-                    clean_answer = raw_answer[match.end():].strip()
-                else:
-                    clean_answer = raw_answer.strip()
+            parsed = tags.parse_reply_tags(raw_answer or "", default_emotion="happy")
+            emotion = parsed.emotion
+            intensity = parsed.intensity
+            gesture = parsed.gesture
+            clean_answer = parsed.clean_text
 
             # Robust fallback guard: if LLM returned empty, too short (<6 chars), or single token ("Done!")
             if not clean_answer or len(clean_answer) < 6 or clean_answer.lower() in ["done!", "done", "ok", "..."]:
@@ -117,13 +97,15 @@ def main():
                 fallback_text, fallback_emotion = memory.get_fallback_greeting(mins_elapsed, hour, aff)
                 clean_answer = fallback_text
                 emotion = fallback_emotion
+                intensity = 2
+                gesture = None
 
             memory.record_greeting(clean_answer)
             memory.update_session_active()
 
-            print(f"\nMiso (startup): [{emotion.upper()}] {clean_answer}\n", flush=True)
+            print(f"\nMiso (startup): [{emotion.upper()}:{intensity}] {clean_answer}\n", flush=True)
             wav_path = tts.speak(clean_answer, cfg)
-            viewer.play(wav_path, emotion=emotion)
+            viewer.play(wav_path, emotion=emotion, intensity=intensity, gesture=gesture, text=clean_answer)
         except Exception as e:
             pass
 
@@ -170,33 +152,27 @@ def main():
 
             raw_answer = llm.reply(speaker_tag + text, cfg, audio_bytes=recording)
 
-            # Extract emotion and affection delta like [happy, +2] or [angry, -1]
-            emotion = "neutral"
-            match = re.match(r"^\[([^\]]+)\]\s*", raw_answer)
-            if match:
-                full_tag = match.group(1).strip()
-                tag_parts = [p.strip().lower() for p in full_tag.split(",")]
-                primary_emotion = tag_parts[0]
-                allowed_emotions = ["happy", "angry", "sad", "surprised", "relaxed", "neutral"]
-                if primary_emotion in allowed_emotions:
-                    emotion = primary_emotion
-                
-                # Apply numeric shift to affection meter
-                memory.apply_affection_delta(full_tag)
-                clean_answer = raw_answer[match.end():].strip()
-            else:
-                clean_answer = re.sub(r"^\[[^\]]*\]?\s*", "", raw_answer).strip()
+            # Extract emotion, intensity, optional gesture, and affection delta like [happy:2, +2][wave]
+            parsed = tags.parse_reply_tags(raw_answer)
+            emotion = parsed.emotion
+            intensity = parsed.intensity
+            gesture = parsed.gesture
+            if parsed.affection_delta:
+                memory.apply_affection_delta(parsed.raw_emotion_tag or f"{emotion}, {parsed.affection_delta:+d}")
+            clean_answer = parsed.clean_text
 
             if not clean_answer or len(clean_answer) < 4:
                 fb_text, fb_emo = memory.get_conversational_fallback(text)
                 clean_answer = fb_text
                 emotion = fb_emo
+                intensity = 2
+                gesture = None
 
-            print(f"Miso: [{emotion.upper()}] {clean_answer}\n", flush=True)
+            print(f"Miso: [{emotion.upper()}:{intensity}] {clean_answer}\n", flush=True)
             memory.update_session_active()
 
             wav_path = tts.speak(clean_answer, cfg)
-            viewer.play(wav_path, emotion=emotion)
+            viewer.play(wav_path, emotion=emotion, intensity=intensity, gesture=gesture, text=clean_answer)
             time.sleep(0.35)  # Acoustic room decay
             heartbeat.mark_interaction()
             heartbeat.set_busy(False)

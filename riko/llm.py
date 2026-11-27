@@ -6,7 +6,7 @@ import sys
 
 from openai import OpenAI
 
-from riko import memory, tools
+from riko import memory, tags, tools
 from riko.config import ROOT
 
 MAX_HISTORY_TURNS = 12  # keeps the last 12 messages in context to prevent token limit spikes
@@ -521,14 +521,93 @@ def reply(user_text, cfg, image_b64=None, audio_bytes=None):
         answer = re.sub(r"([♪♫♬♩*#_~•\.\s]){3,}", r"\1\1", answer)
         answer = re.sub(r"(\b\w+\b)(?:\s+\1){3,}", r"\1 \1", answer, flags=re.IGNORECASE)
 
-    # Dynamic fallback guard if answer returned empty or blank or just an unclosed bracket
-    if not answer or not answer.strip() or len(re.sub(r"^\[[^\]]*\]?\s*", "", answer).strip()) < 4:
+    # Dynamic fallback guard if answer returned empty or blank or just tags
+    if not answer or not answer.strip() or len(tags.strip_reply_tags(answer)) < 4:
         fb_text, fb_emo = memory.get_conversational_fallback(user_text)
-        answer = f"[{fb_emo}] {fb_text}"
+        answer = f"[{fb_emo}:2] {fb_text}"
 
     history.append({"role": "assistant", "content": answer})
     history_path.write_text(json.dumps(history, indent=2, ensure_ascii=False), encoding="utf-8")
     return answer
+
+
+def reply_stream(user_text: str, cfg: dict, audio_bytes: bytes = None):
+    """Streaming variant of reply: yields token deltas as they arrive from the LLM."""
+    openai_key = os.getenv("OPENAI_API_KEY")
+    groq_key = os.getenv("GROQ_API_KEY")
+    if not openai_key and not groq_key:
+        sys.exit("[setup] No API key found. Add OPENAI_API_KEY or GROQ_API_KEY to your .env file.")
+
+    history_path = ROOT / cfg.get("history_file", "chat_history.json")
+    history = []
+    if history_path.exists():
+        try:
+            history = json.loads(history_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    history.append({"role": "user", "content": user_text})
+
+    mem_action, mem_summary = memory.detect_memory_action(user_text)
+    mem_context = f"\n[System Event: You just {mem_action} senpai's personal information: '{mem_summary}'. Acknowledge it playfully in 1 short sentence!]" if mem_action else ""
+
+    media_action = tools.control_media(user_text)
+    media_context = f"\n[System Event: You just successfully {media_action} on senpai's computer. Playfully confirm it in 1 short sentence!]" if media_action else ""
+
+    music_vibe = None
+    music_context = ""
+    if not mem_action and not media_action:
+        music_vibe = tools.detect_and_play_music(user_text)
+        if music_vibe:
+            music_context = f"\n[System Event: You just searched and started playing {music_vibe} on senpai's computer. Playfully confirm that you put it on for them in 1 short sentence!]"
+
+    app_opened = None
+    app_context = ""
+    if not mem_action and not media_action and not music_vibe:
+        app_opened = tools.detect_and_open_app(user_text)
+        if app_opened:
+            app_context = f"\n[System Event: You just successfully opened '{app_opened}' on senpai's computer. Playfully confirm it in 1 short sentence!]"
+
+    game_result = None
+    game_context = ""
+    if not mem_action and not media_action and not music_vibe and not app_opened:
+        game_result = tools.detect_minigame(user_text)
+        if game_result:
+            game_context = f"\n[System Event: Minigame result: {game_result}. React to senpai with playful anime banter in 1 short sentence!]"
+
+    extra_info = mem_context or media_context or music_context or app_context or game_context
+    fast_action_taken = bool(extra_info)
+
+    effective_system_prompt = cfg["system_prompt"] + memory.get_memory_context() + memory.get_visual_context_prompt()
+    context_window = history[-MAX_HISTORY_TURNS:] if len(history) > MAX_HISTORY_TURNS else history
+    formatted_window = [m.copy() for m in context_window]
+    if fast_action_taken and extra_info:
+        formatted_window[-1]["content"] = formatted_window[-1]["content"] + extra_info
+
+    messages = [{"role": "system", "content": effective_system_prompt}] + formatted_window
+
+    use_groq = bool(groq_key and (not openai_key or cfg.get("llm_provider") == "groq"))
+    client = OpenAI(api_key=groq_key, base_url="https://api.groq.com/openai/v1") if use_groq else OpenAI(api_key=openai_key)
+    model_name = os.getenv("GROQ_MODEL", cfg.get("groq_model", "openai/gpt-oss-120b")) if use_groq else cfg["model"]
+
+    stream = client.chat.completions.create(
+        model=model_name,
+        messages=messages,
+        stream=True,
+    )
+
+    accumulated = []
+    for chunk in stream:
+        delta = chunk.choices[0].delta.content if (chunk.choices and chunk.choices[0].delta) else None
+        if delta:
+            accumulated.append(delta)
+            yield delta
+
+    full_text = "".join(accumulated)
+    if full_text:
+        parsed = tags.parse_reply_tags(full_text)
+        if parsed.affection_delta != 0:
+            memory.update_affection(parsed.affection_delta)
 
 
 if __name__ == "__main__":

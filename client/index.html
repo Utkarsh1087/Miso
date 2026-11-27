@@ -162,12 +162,14 @@
     }
     .btn:hover { background: #fff; transform: translateY(-1px); }
   </style>
+  <!-- Offline vendored modules: @pixiv/three-vrm-animation@3.4.1 -->
   <script type="importmap">
     {
       "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.179.1/build/three.module.js",
-        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.179.1/examples/jsm/",
-        "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.4.1/lib/three-vrm.module.min.js"
+        "three": "./js/vendor/three.module.js",
+        "three/addons/": "./js/vendor/addons/",
+        "@pixiv/three-vrm": "./js/vendor/three-vrm.module.min.js",
+        "@pixiv/three-vrm-animation": "./js/vendor/three-vrm-animation.module.min.js"
       }
     }
   </script>
@@ -195,6 +197,15 @@
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+    import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from '@pixiv/three-vrm-animation';
+    import {
+      computeBlendshapeTargets,
+      normalizeEmotion,
+      normalizeGesture,
+      selectActionPlaybackMode,
+    } from './js/visualState.js';
+    import { AnimeVfxController } from './js/animeVfx.js';
+    // Anime VFX mapping catalog: anger (anger_vein), blush (blush_lines), sparkle (sparkles), sweat (sweatdrop)
 
     const statusEl = document.getElementById('status');
     const startOverlay = document.getElementById('start');
@@ -212,7 +223,8 @@
     let isStarted = isTransparent;
 
     let currentEmotion = 'neutral';
-    const knownEmotions = ['happy', 'angry', 'sad', 'surprised', 'relaxed', 'jealous', 'flustered', 'smug', 'caring'];
+    let currentIntensity = 1;
+    const blendshapePresets = ['neutral', 'happy', 'angry', 'sad', 'surprised', 'relaxed'];
 
     function initAudio() {
       if (!audioCtx) {
@@ -307,10 +319,12 @@
     function playNextSpeechChunk() {
       if (speechQueue.length === 0) {
         isPlayingSpeech = false;
-        // Natural emotional linger: hold expression and posture for 1.8s instead of cutting off immediately
+        // Natural emotional linger: hold expression and VFX for 1.8s instead of cutting off immediately
         if (emotionResetTimer) clearTimeout(emotionResetTimer);
         emotionResetTimer = setTimeout(() => {
           currentEmotion = 'neutral';
+          currentIntensity = 1;
+          vfxController?.clear();
         }, 1800);
         statusEl.textContent = '● Listening for Miso...';
         fetch('/done', { method: 'POST' }).catch(() => {});
@@ -321,9 +335,14 @@
       isPlayingSpeech = true;
       const nextChunk = speechQueue.shift();
       initAudio();
-      currentEmotion = nextChunk.emotion || 'neutral';
+      currentEmotion = normalizeEmotion(nextChunk.emotion || 'neutral');
+      currentIntensity = nextChunk.intensity ?? (currentEmotion === 'neutral' ? 1 : 2);
+      if (nextChunk.gesture) {
+        playVrmaGesture(nextChunk.gesture);
+      }
+      vfxController?.setEmotion(currentEmotion, currentIntensity, nextChunk.vfx);
       voice.src = nextChunk.audio;
-      statusEl.textContent = `🔊 Miso speaking... [${currentEmotion}]`;
+      statusEl.textContent = `🔊 Miso speaking... [${currentEmotion}:${currentIntensity}]`;
       voice.play().catch(err => {
         console.warn('Playback error:', err);
         playNextSpeechChunk();
@@ -353,6 +372,9 @@
           voice.currentTime = 0;
           isPlayingSpeech = false;
           currentEmotion = 'neutral';
+          currentIntensity = 1;
+          vfxController?.clear();
+          returnToIdleVrma();
           statusEl.textContent = '● Listening for Miso...';
           return;
         }
@@ -386,7 +408,14 @@
 
         // 4. Queue speech chunk (preserves all sentences in sequence without cutoff)
         if (data && data.audio) {
-          speechQueue.push({ audio: data.audio, emotion: data.emotion || 'neutral' });
+          speechQueue.push({
+            audio: data.audio,
+            emotion: data.emotion || 'neutral',
+            intensity: data.intensity ?? 2,
+            gesture: data.gesture || null,
+            vfx: data.vfx ?? undefined,
+            text: data.text || '',
+          });
           if (!isPlayingSpeech) {
             playNextSpeechChunk();
           }
@@ -603,6 +632,7 @@
           if (hitY >= defaultHeadY - 0.22) {
             touchState = 'headpat';
             touchTimer = 2.4;
+            vfxController?.setEmotion('caring', 2, 'heart_pop');
             spawnHeart(e.clientX, e.clientY, Math.random() > 0.5 ? '💖' : '✨');
             statusEl.textContent = '💖 Hehe... senpai is patting my head...';
             statusEl.style.display = 'block';
@@ -610,6 +640,7 @@
           } else {
             touchState = 'poke';
             touchTimer = 1.8;
+            vfxController?.setEmotion('angry', 2, 'anger_vein');
             spawnHeart(e.clientX, e.clientY, '💢');
             statusEl.textContent = '💢 Baka! Where are you touching, senpai?!';
             statusEl.style.display = 'block';
@@ -699,16 +730,121 @@
       document.body.style.background = '#' + themes[themeIndex].color.toString(16).padStart(6, '0');
     };
 
-    // ── Load VRM Avatar Loader ──
+    // ── Load VRM Avatar Loader & VRMA Animation Mixer ──
     const loader = new GLTFLoader();
     loader.register((parser) => new VRMLoaderPlugin(parser));
+    loader.register((parser) => new VRMAnimationLoaderPlugin(parser));
     let fingerBones = { left: [], right: [] };
+    let mixer = null;
+    let vrmaReady = false;
+    let currentBaseAction = null;
+    let activeGestureAction = null;
+    let vfxController = null;
+    const vrmaClipCache = new Map();
+
+    async function loadVrmaClip(name, vrm) {
+      if (!vrm) return null;
+      if (vrmaClipCache.has(name)) return vrmaClipCache.get(name);
+      try {
+        const gltf = await loader.loadAsync(`animations/vrma/${name}.vrma`);
+        const vrmAnim = gltf.userData?.vrmAnimations?.[0];
+        if (!vrmAnim) return null;
+        const clip = createVRMAnimationClip(vrmAnim, vrm);
+        // Keep taskbar grounding intact by removing any root/hips translation tracks
+        clip.tracks = clip.tracks.filter((trk) => !trk.name.endsWith('.position'));
+        vrmaClipCache.set(name, clip);
+        return clip;
+      } catch (err) {
+        console.warn(`[vrma] Failed to load ${name}.vrma:`, err);
+        return null;
+      }
+    }
+
+    function returnToIdleVrma(fadeSec = 0.35) {
+      if (!mixer || !currentBaseAction) return;
+      if (activeGestureAction) {
+        currentBaseAction.enabled = true;
+        currentBaseAction.setEffectiveWeight(1.0);
+        currentBaseAction.play();
+        activeGestureAction.crossFadeTo(currentBaseAction, fadeSec, false);
+        const oldAction = activeGestureAction;
+        activeGestureAction = null;
+        setTimeout(() => {
+          if (oldAction !== activeGestureAction) oldAction.stop();
+        }, Math.round(fadeSec * 1000) + 50);
+      }
+    }
+
+    async function playVrmaGesture(gestureName) {
+      const norm = normalizeGesture(gestureName);
+      if (!norm || !mixer || !vrmaReady || !currentVrm) return;
+      const targetVrm = currentVrm;
+      const clip = await loadVrmaClip(norm, targetVrm);
+      if (!clip || currentVrm !== targetVrm || !mixer) return;
+
+      const action = mixer.clipAction(clip);
+      const mode = selectActionPlaybackMode(norm);
+      action.reset();
+      action.setLoop(mode === 'LoopRepeat' ? THREE.LoopRepeat : THREE.LoopOnce, mode === 'LoopRepeat' ? Infinity : 1);
+      action.clampWhenFinished = mode !== 'LoopRepeat';
+      action.enabled = true;
+      action.setEffectiveWeight(1.0);
+      action.play();
+
+      const fade = 0.25;
+      const fromAction = activeGestureAction || currentBaseAction;
+      if (fromAction && fromAction !== action) {
+        fromAction.crossFadeTo(action, fade, false);
+      }
+      activeGestureAction = action;
+    }
+
+    async function initVrmaForAvatar(vrm) {
+      vrmaReady = false;
+      vrmaClipCache.clear();
+      currentBaseAction = null;
+      activeGestureAction = null;
+      if (mixer) {
+        mixer.stopAllAction();
+        mixer = null;
+      }
+      if (vfxController) {
+        vfxController.dispose();
+        vfxController = null;
+      }
+
+      vfxController = new AnimeVfxController(vrm, camera, 'vfx');
+      mixer = new THREE.AnimationMixer(vrm.scene);
+      mixer.addEventListener('finished', (event) => {
+        if (event.action && event.action === activeGestureAction) {
+          returnToIdleVrma(0.35);
+        }
+      });
+
+      const idleClip = await loadVrmaClip('idle', vrm);
+      if (idleClip && currentVrm === vrm && mixer) {
+        currentBaseAction = mixer.clipAction(idleClip);
+        currentBaseAction.setLoop(THREE.LoopRepeat, Infinity);
+        currentBaseAction.setEffectiveWeight(1.0);
+        currentBaseAction.play();
+        vrmaReady = true;
+      }
+    }
 
     function loadAvatar(vrmUrl) {
       loader.load(
         vrmUrl,
         (gltf) => {
           if (currentVrm) {
+            if (mixer) {
+              mixer.stopAllAction();
+              mixer.uncacheRoot(currentVrm.scene);
+              mixer = null;
+            }
+            if (vfxController) {
+              vfxController.dispose();
+              vfxController = null;
+            }
             scene.remove(currentVrm.scene);
             VRMUtils.deepDispose(currentVrm.scene);
           }
@@ -771,6 +907,7 @@
           });
 
           statusEl.textContent = 'Avatar ready!';
+          initVrmaForAvatar(vrm);
         },
         undefined,
         (err) => {
@@ -801,7 +938,7 @@
     const glanceTarget = new THREE.Vector3(0, 0, 0);
 
     const clock = new THREE.Clock();
-    const emotionWeights = { happy: 0, angry: 0, sad: 0, surprised: 0, relaxed: 0 };
+    const emotionWeights = { neutral: 1, happy: 0, angry: 0, sad: 0, surprised: 0, relaxed: 0 };
 
     // ── Procedural Locomotion & Expressive Movement Engine ──
     let locomotionState = 'idle'; // 'idle', 'walk', 'sit', 'dance', 'stretch', 'spin'
@@ -968,37 +1105,6 @@
         let tRFootX = 0, tRFootY = 0, tRFootZ = 0;
         let legSpeed = 8.0;
 
-        // ── 1. Organic Weight Shifting, Contrapposto & Multi-Joint Breathing ──
-        // Hip contrapposto weight sway (transfers body weight every 4-6 seconds)
-        const weightCycle = Math.sin(time * 0.45);
-        if (hips) {
-          hips.rotation.z = weightCycle * 0.045; // Natural hip tilt (2.6 deg)
-          hips.rotation.y = Math.cos(time * 0.35) * 0.035;
-          hips.position.x = weightCycle * 0.022; // Weight shifts between feet
-        }
-
-        // Sinusoidal organic breathing across spine, chest and shoulders
-        const breathCycle = Math.sin(time * 1.6);
-
-        if (spine) {
-          // Counter-balancing spine tilt to keep head balanced over hips
-          spine.rotation.z = -weightCycle * 0.032 + Math.sin(time * 0.6) * 0.015;
-          spine.rotation.x = breathCycle * 0.022;
-          spine.rotation.y = Math.sin(time * 0.4) * 0.025;
-        }
-        if (chest) {
-          chest.rotation.z = -weightCycle * 0.018;
-          chest.rotation.x = Math.sin(time * 1.6 + 0.3) * 0.018;
-          chest.rotation.y = Math.sin(time * 0.35) * 0.020;
-        }
-        if (neck) {
-          neck.rotation.x = -breathCycle * 0.010;
-          neck.rotation.y = 0;
-          neck.rotation.z = Math.sin(time * 0.5) * 0.020;
-        }
-        if (leftShoulder) leftShoulder.rotation.z = -breathCycle * 0.016;
-        if (rightShoulder) rightShoulder.rotation.z = breathCycle * 0.016;
-
         // ── 2. Unified Gaze Tracking with Eye Saccades & Attention Wander ──
         saccadeTimer += delta;
         if (saccadeTimer > nextSaccade) {
@@ -1036,327 +1142,18 @@
         const phonemes = analyzePhonemes();
         const isSpeaking = phonemes.level > 0.06;
 
-        // ── 4. Dynamic Emotional Gestures, Conversational Gesticulation & Articulation ──
-        let tLArmX = 0, tLArmY = 0, tLArmZ = -1.20 + breathCycle * 0.02;
-        let tRArmX = 0, tRArmY = 0, tRArmZ = 1.20 - breathCycle * 0.02;
-        let tLLowY = 0.20, tRLowY = -0.20;
-        let tLHandX = 0.02, tLHandY = 0.04, tLHandZ = 0.08;
-        let tRHandX = 0.02, tRHandY = -0.04, tRHandZ = -0.08;
-        let armSpeed = 7.5;
+        // ── 4. VRMA Mixer vs. Procedural Bone Priority Gate ──
+        const locomotionActive = locomotionState !== 'idle';
+        const touchActive = touchState !== null;
+        const vrmaOwnsBones = Boolean(mixer && vrmaReady && !locomotionActive && !touchActive);
 
-        // Head Orientations (subtle gestures, leaving gaze pointing to VRM lookAt)
-        if (headNode) {
-          if (touchState === 'headpat') {
-            headNode.rotation.x = -0.12;
-            headNode.rotation.y = 0;
-            headNode.rotation.z = Math.sin(time * 3.5) * 0.05;
-          } else if (touchState === 'poke') {
-            headNode.rotation.x = 0;
-            headNode.rotation.y = 0;
-            headNode.rotation.z = -0.16;
-          } else if (isSpeaking) {
-            // Conversational nodding on phoneme level
-            headNode.rotation.x = -0.04 + Math.sin(time * 8.5) * (phonemes.level * 0.08);
-            headNode.rotation.y = 0;
-            headNode.rotation.z = (currentEmotion === 'angry') ? -0.08 + Math.sin(time * 3.5) * 0.04 : Math.sin(time * 2.8) * 0.025;
-          } else if (currentEmotion === 'angry') {
-            headNode.rotation.x = 0;
-            headNode.rotation.y = 0;
-            headNode.rotation.z = Math.sin(time * 2.2) * 0.04 - 0.10;
-          } else if (currentEmotion === 'sad') {
-            headNode.rotation.x = 0.18;
-            headNode.rotation.y = 0;
-            headNode.rotation.z = 0;
-          } else {
-            // Natural idle head breathing
-            headNode.rotation.x = -breathCycle * 0.005;
-            headNode.rotation.y = 0;
-            headNode.rotation.z = Math.sin(time * 0.45) * 0.035;
-          }
-        }
-
-        if (touchState === 'headpat') {
-          touchTimer -= delta;
-          if (touchTimer <= 0) touchState = null;
-          currentVrm.scene.position.y = groundLevelY + Math.sin(time * 2.0) * 0.005;
-          tLArmX = -0.2; tLArmY = 0; tLArmZ = -1.15;
-          tRArmX = -0.2; tRArmY = 0; tRArmZ = 1.15;
-          tLLowY = 0.15; tRLowY = -0.15;
-          tLHandZ = 0.06; tRHandZ = -0.06;
-        } else if (touchState === 'poke') {
-          touchTimer -= delta;
-          if (touchTimer <= 0) touchState = null;
-          currentVrm.scene.position.y = groundLevelY;
-          tLArmX = -0.5; tLArmY = -0.3; tLArmZ = -0.9;
-          tRArmX = -0.5; tRArmY = 0.3; tRArmZ = 0.9;
-          tLLowY = 0.4; tRLowY = -0.4;
-          armSpeed = 10.0;
-        } else if (touchState === 'flustered') {
-          touchTimer -= delta;
-          if (touchTimer <= 0) touchState = null;
-          currentVrm.scene.position.y = groundLevelY;
-          tLArmX = -0.2; tLArmY = 0.2; tLArmZ = -1.0;
-          tRArmX = -0.3; tRArmY = -0.2; tRArmZ = 0.95;
-          tLLowY = 0.3; tRLowY = -0.3;
-        } else if (isSpeaking) {
-          // ── Natural Conversational Gesticulation (Speaking with Voice Cadence) ──
-          if (currentEmotion === 'happy') {
-            // Cheerful, spirited speaking: bouncing cadence + dynamic alternating gestures
-            currentVrm.scene.position.y = groundLevelY + Math.abs(Math.sin(time * 5.0)) * 0.018;
-            const happyWave = Math.sin(time * 4.5) * 0.15;
-            tRArmX = -0.55 + happyWave;
-            tRArmY = -0.1;
-            tRArmZ = 0.65 + Math.cos(time * 4.5) * 0.12;
-            tRLowY = -0.75 + Math.sin(time * 4.5) * 0.25;
-            tRHandZ = Math.sin(time * 9.0) * 0.22;
-
-            tLArmX = -0.25 + Math.sin(time * 3.0) * 0.10;
-            tLArmY = 0.15;
-            tLArmZ = -1.10 + Math.sin(time * 3.0) * 0.08;
-            tLLowY = 0.40;
-            armSpeed = 9.0;
-          } else if (currentEmotion === 'angry' || currentEmotion === 'jealous') {
-            // Sassy Tsundere / Jealous gesticulation: sharp emphasis with arms crossed or hand huffing
-            currentVrm.scene.position.y = groundLevelY;
-            tLArmX = -0.45; tLArmY = 0.40; tLArmZ = -0.92;
-            tRArmX = -0.45; tRArmY = -0.40; tRArmZ = 0.92;
-            tLLowY = 1.25 + Math.sin(time * 4.0) * 0.10;
-            tRLowY = -1.25 - Math.sin(time * 4.0) * 0.10;
-            tLHandZ = -0.12; tRHandZ = 0.12;
-            armSpeed = 10.0;
-          } else if (currentEmotion === 'flustered') {
-            // Flustered / Embarrassed: nervous hand flutter & fidgeting in front of chest
-            currentVrm.scene.position.y = groundLevelY;
-            tLArmX = -0.32 + Math.sin(time * 6.0) * 0.05;
-            tLArmY = 0.22;
-            tLArmZ = -0.98;
-            tRArmX = -0.32 + Math.cos(time * 6.0) * 0.05;
-            tRArmY = -0.22;
-            tRArmZ = 0.98;
-            tLLowY = 0.85; tRLowY = -0.85;
-            tLHandZ = 0.15; tRHandZ = -0.15;
-            armSpeed = 11.0;
-          } else if (currentEmotion === 'smug') {
-            // Confident tsundere smugness: hand on hip, slight head tilt
-            currentVrm.scene.position.y = groundLevelY;
-            tLArmX = -0.35; tLArmY = 0.22; tLArmZ = -0.92;
-            tLLowY = 0.95;
-            tLHandZ = 0.14;
-            tRArmX = -0.12 + Math.sin(time * 2.5) * 0.04;
-            tRArmY = -0.10;
-            tRArmZ = 1.15;
-            tRLowY = -0.30;
-            armSpeed = 7.0;
-          } else if (currentEmotion === 'caring') {
-            // Soft caring / protective: gentle hands clasped, leaning in attentively
-            currentVrm.scene.position.y = groundLevelY;
-            tLArmX = -0.25; tLArmY = 0.14; tLArmZ = -1.02;
-            tRArmX = -0.25; tRArmY = -0.14; tRArmZ = 1.02;
-            tLLowY = 0.60; tRLowY = -0.60;
-            tLHandZ = 0.10; tRHandZ = -0.10;
-            armSpeed = 6.0;
-          } else if (currentEmotion === 'surprised') {
-            // Leaning back with raised hands and wide gaze
-            currentVrm.scene.position.y = groundLevelY;
-            if (spine) spine.rotation.x = -0.08;
-            tLArmX = -0.45 + Math.sin(time * 3.0) * 0.06;
-            tLArmY = 0.25;
-            tLArmZ = -0.80;
-            tRArmX = -0.45 + Math.cos(time * 3.0) * 0.06;
-            tRArmY = -0.25;
-            tRArmZ = 0.80;
-            tLLowY = 0.45; tRLowY = -0.45;
-            tLHandX = -0.15; tRHandX = -0.15;
-            armSpeed = 9.0;
-          } else {
-            // Natural conversational storytelling (alternating expressive gesticulation)
-            currentVrm.scene.position.y = groundLevelY;
-            const gesticulateY = Math.sin(time * 3.2) * 0.14;
-            const gesticulateZ = Math.cos(time * 2.8) * 0.10;
-            tRArmX = -0.38 + gesticulateY;
-            tRArmY = -0.20;
-            tRArmZ = 0.72 + gesticulateZ;
-            tRLowY = -0.75 + Math.sin(time * 3.2) * 0.22;
-
-            // Secondary wrist inertia lag (Disney follow-through)
-            const wristLag = time * 3.2 - 0.45;
-            tRHandX = Math.sin(wristLag) * 0.08;
-            tRHandY = -Math.cos(wristLag) * 0.10;
-            tRHandZ = -Math.sin(wristLag) * 0.15;
-
-            tLArmX = -0.10 + Math.sin(time * 2.0) * 0.06;
-            tLArmY = 0.12;
-            tLArmZ = -1.15 + Math.sin(time * 1.6) * 0.04;
-            tLLowY = 0.25;
-            tLHandZ = 0.08 + Math.sin(time * 1.6) * 0.03;
-            armSpeed = 8.0;
-          }
-        } else if (currentEmotion === 'angry') {
-          // Standing tsundere crossed-arms pose while listening
-          currentVrm.scene.position.y = groundLevelY;
-          if (headNode) headNode.rotation.z = Math.sin(time * 2.2) * 0.04 - 0.10;
-          tLArmX = -0.4; tLArmY = 0.45; tLArmZ = -0.9;
-          tRArmX = -0.4; tRArmY = -0.45; tRArmZ = 0.9;
-          tLLowY = 1.3; tRLowY = -1.3;
-          tLHandZ = -0.12; tRHandZ = 0.12;
-        } else if (currentEmotion === 'happy') {
-          // Cheerful resting pose with subtle bounce
-          currentVrm.scene.position.y = groundLevelY + Math.abs(Math.sin(time * 2.5)) * 0.008;
-          tLArmZ = -1.15 + Math.sin(time * 1.6) * 0.03;
-          tRArmX = -0.30; tRArmY = -0.15; tRArmZ = 0.85;
-          tRLowY = -0.45;
-          tRHandZ = Math.sin(time * 4.0) * 0.12;
-          tLHandZ = 0.08;
-        } else {
-          // ── Rich Organic Idle Stance Cycling (Rayen 104 Animation Paradigm) ──
-          currentVrm.scene.position.y = groundLevelY;
-          const stanceCycle = Math.floor(time / 14.0) % 3;
-
-          if (stanceCycle === 0) {
-            // Stance A: Natural anime resting pose (hands gently forward at thighs with elbow bend)
-            tLArmX = -0.12 + Math.sin(time * 0.8) * 0.03;
-            tLArmY = 0.08;
-            tLArmZ = -1.18 + breathCycle * 0.02;
-            tRArmX = -0.12 + Math.cos(time * 0.8) * 0.03;
-            tRArmY = -0.08;
-            tRArmZ = 1.18 - breathCycle * 0.02;
-            tLLowY = 0.30;
-            tRLowY = -0.30;
-            tLHandX = 0.04; tLHandY = 0.05; tLHandZ = 0.08;
-            tRHandX = 0.04; tRHandY = -0.05; tRHandZ = -0.08;
-          } else if (stanceCycle === 1) {
-            // Stance B: Relaxed anime hands-clasped-in-front posture
-            tLArmX = -0.22; tLArmY = 0.15; tLArmZ = -1.05;
-            tRArmX = -0.22; tRArmY = -0.15; tRArmZ = 1.05;
-            tLLowY = 0.65 + breathCycle * 0.03;
-            tRLowY = -0.65 - breathCycle * 0.03;
-            tLHandZ = 0.15; tRHandZ = -0.15;
-          } else {
-            // Stance C: Confident tsundere single-hand on hip
-            tLArmX = -0.28; tLArmY = 0.20; tLArmZ = -0.95;
-            tLLowY = 0.90;
-            tLHandZ = 0.12;
-
-            tRArmX = -0.08; tRArmY = -0.05; tRArmZ = 1.20 - breathCycle * 0.02;
-            tRLowY = -0.25;
-            tRHandZ = -0.08;
-          }
-          armSpeed = 5.0; // gentle, graceful idle stance transitions
-        }
-
-        // ── 5. Procedural Locomotion State Machine (Walk, Sit, Dance, Stretch, Spin, Idle) ──
-        if (locomotionState === 'walk') {
-          walkPhase += delta * 4.2;
-          const legL = Math.sin(walkPhase);
-          const legR = -legL;
-
-          tLLegX = legL * 0.42;
-          tRLegX = legR * 0.42;
-          tLLegY = 0.04; tRLegY = -0.04;
-          tLKneeX = Math.max(0, -legL) * 0.75;
-          tRKneeX = Math.max(0, -legR) * 0.75;
-          tLFootX = legL * 0.18;
-          tRFootX = legR * 0.18;
-
-          currentVrm.scene.position.y = groundLevelY + Math.abs(Math.sin(walkPhase)) * 0.022;
-          if (hips) hips.rotation.z = Math.sin(walkPhase) * 0.035;
-
-          // Opposing arm swing
-          tLArmX = -legR * 0.35;
-          tRArmX = -legL * 0.35;
-          tLArmZ = -1.15; tRArmZ = 1.15;
-          tLLowY = 0.30; tRLowY = -0.30;
-          armSpeed = 9.0;
-          legSpeed = 10.0;
-
-          // Screen boundary aware taskbar pacing
-          const maxWalkX = screenHalfWidth - 0.50;
-          const minWalkX = -screenHalfWidth + 0.50;
-          currentVrm.scene.position.x += walkDirection * delta * 0.20;
-          if (currentVrm.scene.position.x >= maxWalkX) {
-            walkDirection = -1;
-          } else if (currentVrm.scene.position.x <= minWalkX) {
-            walkDirection = 1;
-          }
-          targetIdleX = currentVrm.scene.position.x;
-          const targetRotY = (walkDirection > 0 ? 0.38 : -0.38);
-          currentVrm.scene.rotation.y += (targetRotY - currentVrm.scene.rotation.y) * (1.0 - Math.exp(-6.0 * delta));
-        } else if (locomotionState === 'sit') {
-          // Sit comfortably above taskbar with legs dangling down naturally
-          tLLegX = 1.45; tRLegX = 1.45;
-          tLLegZ = 0.08; tRLegZ = -0.08;
-          tLKneeX = -1.48; tRKneeX = -1.48;
-          tLFootX = 0.15; tRFootX = 0.15;
-
-          currentVrm.scene.position.y += ((groundLevelY - 0.38) - currentVrm.scene.position.y) * (1.0 - Math.exp(-5.0 * delta));
-          currentVrm.scene.rotation.y += (0 - currentVrm.scene.rotation.y) * (1.0 - Math.exp(-6.0 * delta));
-          tLArmX = -0.50; tLArmY = 0.15; tLArmZ = -1.0;
-          tRArmX = -0.50; tRArmY = -0.15; tRArmZ = 1.0;
-          tLLowY = 0.55; tRLowY = -0.55;
-          armSpeed = 6.0;
-          legSpeed = 6.0;
-        } else if (locomotionState === 'dance') {
-          locomotionTimer -= delta;
-          if (locomotionTimer <= 0) locomotionState = 'idle';
-
-          currentVrm.scene.position.x = Math.sin(time * 3.2) * 0.12;
-          currentVrm.scene.position.y = groundLevelY + Math.abs(Math.sin(time * 6.4)) * 0.024;
-          if (hips) hips.rotation.z = Math.sin(time * 3.2) * 0.06;
-          if (headNode) headNode.rotation.z = Math.cos(time * 3.2) * 0.08;
-
-          tLLegX = Math.sin(time * 3.2) * 0.18;
-          tRLegX = -Math.sin(time * 3.2) * 0.18;
-          tLKneeX = Math.max(0, -Math.sin(time * 3.2)) * 0.35;
-          tRKneeX = Math.max(0, Math.sin(time * 3.2)) * 0.35;
-
-          tLArmZ = -1.60 + Math.sin(time * 3.2) * 0.35;
-          tRArmZ = 1.60 - Math.sin(time * 3.2) * 0.35;
-          tLArmX = -0.30; tRArmX = -0.30;
-          tLLowY = 0.65; tRLowY = -0.65;
-          armSpeed = 10.0;
-          legSpeed = 10.0;
-        } else if (locomotionState === 'stretch') {
-          locomotionTimer -= delta;
-          if (locomotionTimer <= 0) locomotionState = 'idle';
-
-          // Natural upright skyward arm stretch
-          tLArmZ = -2.70; tRArmZ = 2.70;
-          tLArmX = -0.10; tRArmX = -0.10;
-          tLLowY = 0.20; tRLowY = -0.20;
-
-          // Upright spine with gentle side stretch sway (zero backward hyperextension)
-          if (spine) {
-            spine.rotation.x = 0.02;
-            spine.rotation.z = Math.sin(time * 2.2) * 0.035;
-          }
-          if (neck) {
-            neck.rotation.x = 0.03;
-            neck.rotation.y = 0;
-          }
-          if (headNode) {
-            headNode.rotation.x = 0.03;
-            headNode.rotation.y = 0;
-            headNode.rotation.z = Math.sin(time * 2.2) * 0.025;
-          }
-          currentVrm.scene.position.y = groundLevelY + 0.015; // gentle heel rise
-          armSpeed = 4.5;
-        } else if (locomotionState === 'spin') {
-          spinAngle += delta * 6.5;
-          currentVrm.scene.rotation.y = spinAngle;
-          tLArmZ = -0.85; tRArmZ = 0.85;
-          tLArmX = -0.15; tRArmX = -0.15;
-          tLLowY = 0.35; tRLowY = -0.35;
-          if (spinAngle >= Math.PI * 2) {
-            currentVrm.scene.rotation.y = 0;
-            locomotionState = 'idle';
-          }
-        } else {
-          // Idle stance: stays at targetIdleX, planted flush on taskbar
+        if (vrmaOwnsBones) {
+          mixer.update(delta);
+          if (hips) hips.position.set(0, 0, 0);
           currentVrm.scene.position.x += (targetIdleX - currentVrm.scene.position.x) * (1.0 - Math.exp(-4.0 * delta));
           currentVrm.scene.position.y += (groundLevelY - currentVrm.scene.position.y) * (1.0 - Math.exp(-5.0 * delta));
           currentVrm.scene.rotation.y += (0 - currentVrm.scene.rotation.y) * (1.0 - Math.exp(-5.0 * delta));
 
-          // Autonomous idle locomotion: stretches or takes a brief stroll every ~2.5 mins
           idleLocomotionTimer += delta;
           if (idleLocomotionTimer > 150.0 && !isSpeaking) {
             idleLocomotionTimer = 0;
@@ -1367,26 +1164,378 @@
               setTimeout(() => { if (locomotionState === 'walk') triggerLocomotionAction('idle'); }, 9000);
             }
           }
+        } else {
+          // ── 1. Organic Weight Shifting, Contrapposto & Multi-Joint Breathing ──
+          // Hip contrapposto weight sway (transfers body weight every 4-6 seconds)
+          const weightCycle = Math.sin(time * 0.45);
+          if (hips) {
+            hips.rotation.z = weightCycle * 0.045; // Natural hip tilt (2.6 deg)
+            hips.rotation.y = Math.cos(time * 0.35) * 0.035;
+            hips.position.x = weightCycle * 0.022; // Weight shifts between feet
+          }
+
+          // Sinusoidal organic breathing across spine, chest and shoulders
+          const breathCycle = Math.sin(time * 1.6);
+
+          if (spine) {
+            // Counter-balancing spine tilt to keep head balanced over hips
+            spine.rotation.z = -weightCycle * 0.032 + Math.sin(time * 0.6) * 0.015;
+            spine.rotation.x = breathCycle * 0.022;
+            spine.rotation.y = Math.sin(time * 0.4) * 0.025;
+          }
+          if (chest) {
+            chest.rotation.z = -weightCycle * 0.018;
+            chest.rotation.x = Math.sin(time * 1.6 + 0.3) * 0.018;
+            chest.rotation.y = Math.sin(time * 0.35) * 0.020;
+          }
+          if (neck) {
+            neck.rotation.x = -breathCycle * 0.010;
+            neck.rotation.y = 0;
+            neck.rotation.z = Math.sin(time * 0.5) * 0.020;
+          }
+          if (leftShoulder) leftShoulder.rotation.z = -breathCycle * 0.016;
+          if (rightShoulder) rightShoulder.rotation.z = breathCycle * 0.016;
+
+          // ── 4. Dynamic Emotional Gestures, Conversational Gesticulation & Articulation ──
+          let tLArmX = 0, tLArmY = 0, tLArmZ = -1.20 + breathCycle * 0.02;
+          let tRArmX = 0, tRArmY = 0, tRArmZ = 1.20 - breathCycle * 0.02;
+          let tLLowY = 0.20, tRLowY = -0.20;
+          let tLHandX = 0.02, tLHandY = 0.04, tLHandZ = 0.08;
+          let tRHandX = 0.02, tRHandY = -0.04, tRHandZ = -0.08;
+          let armSpeed = 7.5;
+
+          // Head Orientations (subtle gestures, leaving gaze pointing to VRM lookAt)
+          if (headNode) {
+            if (touchState === 'headpat') {
+              headNode.rotation.x = -0.12;
+              headNode.rotation.y = 0;
+              headNode.rotation.z = Math.sin(time * 3.5) * 0.05;
+            } else if (touchState === 'poke') {
+              headNode.rotation.x = 0;
+              headNode.rotation.y = 0;
+              headNode.rotation.z = -0.16;
+            } else if (isSpeaking) {
+              // Conversational nodding on phoneme level
+              headNode.rotation.x = -0.04 + Math.sin(time * 8.5) * (phonemes.level * 0.08);
+              headNode.rotation.y = 0;
+              headNode.rotation.z = (currentEmotion === 'angry') ? -0.08 + Math.sin(time * 3.5) * 0.04 : Math.sin(time * 2.8) * 0.025;
+            } else if (currentEmotion === 'angry') {
+              headNode.rotation.x = 0;
+              headNode.rotation.y = 0;
+              headNode.rotation.z = Math.sin(time * 2.2) * 0.04 - 0.10;
+            } else if (currentEmotion === 'sad') {
+              headNode.rotation.x = 0.18;
+              headNode.rotation.y = 0;
+              headNode.rotation.z = 0;
+            } else {
+              // Natural idle head breathing
+              headNode.rotation.x = -breathCycle * 0.005;
+              headNode.rotation.y = 0;
+              headNode.rotation.z = Math.sin(time * 0.45) * 0.035;
+            }
+          }
+
+          if (touchState === 'headpat') {
+            touchTimer -= delta;
+            if (touchTimer <= 0) {
+              touchState = null;
+              if (!isPlayingSpeech) vfxController?.clear();
+            }
+            currentVrm.scene.position.y = groundLevelY + Math.sin(time * 2.0) * 0.005;
+            tLArmX = -0.2; tLArmY = 0; tLArmZ = -1.15;
+            tRArmX = -0.2; tRArmY = 0; tRArmZ = 1.15;
+            tLLowY = 0.15; tRLowY = -0.15;
+            tLHandZ = 0.06; tRHandZ = -0.06;
+          } else if (touchState === 'poke') {
+            touchTimer -= delta;
+            if (touchTimer <= 0) {
+              touchState = null;
+              if (!isPlayingSpeech) vfxController?.clear();
+            }
+            currentVrm.scene.position.y = groundLevelY;
+            tLArmX = -0.5; tLArmY = -0.3; tLArmZ = -0.9;
+            tRArmX = -0.5; tRArmY = 0.3; tRArmZ = 0.9;
+            tLLowY = 0.4; tRLowY = -0.4;
+            armSpeed = 10.0;
+          } else if (touchState === 'flustered') {
+            touchTimer -= delta;
+            if (touchTimer <= 0) {
+              touchState = null;
+              if (!isPlayingSpeech) vfxController?.clear();
+            }
+            currentVrm.scene.position.y = groundLevelY;
+            tLArmX = -0.2; tLArmY = 0.2; tLArmZ = -1.0;
+            tRArmX = -0.3; tRArmY = -0.2; tRArmZ = 0.95;
+            tLLowY = 0.3; tRLowY = -0.3;
+          } else if (isSpeaking) {
+            // ── Natural Conversational Gesticulation (Fallback when VRMA unavailable) ──
+            if (currentEmotion === 'happy') {
+              currentVrm.scene.position.y = groundLevelY + Math.abs(Math.sin(time * 5.0)) * 0.018;
+              const happyWave = Math.sin(time * 4.5) * 0.15;
+              tRArmX = -0.55 + happyWave;
+              tRArmY = -0.1;
+              tRArmZ = 0.65 + Math.cos(time * 4.5) * 0.12;
+              tRLowY = -0.75 + Math.sin(time * 4.5) * 0.25;
+              tRHandZ = Math.sin(time * 9.0) * 0.22;
+
+              tLArmX = -0.25 + Math.sin(time * 3.0) * 0.10;
+              tLArmY = 0.15;
+              tLArmZ = -1.10 + Math.sin(time * 3.0) * 0.08;
+              tLLowY = 0.40;
+              armSpeed = 9.0;
+            } else if (currentEmotion === 'angry' || currentEmotion === 'jealous') {
+              currentVrm.scene.position.y = groundLevelY;
+              tLArmX = -0.45; tLArmY = 0.40; tLArmZ = -0.92;
+              tRArmX = -0.45; tRArmY = -0.40; tRArmZ = 0.92;
+              tLLowY = 1.25 + Math.sin(time * 4.0) * 0.10;
+              tRLowY = -1.25 - Math.sin(time * 4.0) * 0.10;
+              tLHandZ = -0.12; tRHandZ = 0.12;
+              armSpeed = 10.0;
+            } else if (currentEmotion === 'flustered') {
+              currentVrm.scene.position.y = groundLevelY;
+              tLArmX = -0.32 + Math.sin(time * 6.0) * 0.05;
+              tLArmY = 0.22;
+              tLArmZ = -0.98;
+              tRArmX = -0.32 + Math.cos(time * 6.0) * 0.05;
+              tRArmY = -0.22;
+              tRArmZ = 0.98;
+              tLLowY = 0.85; tRLowY = -0.85;
+              tLHandZ = 0.15; tRHandZ = -0.15;
+              armSpeed = 11.0;
+            } else if (currentEmotion === 'smug') {
+              currentVrm.scene.position.y = groundLevelY;
+              tLArmX = -0.35; tLArmY = 0.22; tLArmZ = -0.92;
+              tLLowY = 0.95;
+              tLHandZ = 0.14;
+              tRArmX = -0.12 + Math.sin(time * 2.5) * 0.04;
+              tRArmY = -0.10;
+              tRArmZ = 1.15;
+              tRLowY = -0.30;
+              armSpeed = 7.0;
+            } else if (currentEmotion === 'caring') {
+              currentVrm.scene.position.y = groundLevelY;
+              tLArmX = -0.25; tLArmY = 0.14; tLArmZ = -1.02;
+              tRArmX = -0.25; tRArmY = -0.14; tRArmZ = 1.02;
+              tLLowY = 0.60; tRLowY = -0.60;
+              tLHandZ = 0.10; tRHandZ = -0.10;
+              armSpeed = 6.0;
+            } else if (currentEmotion === 'surprised') {
+              currentVrm.scene.position.y = groundLevelY;
+              if (spine) spine.rotation.x = -0.08;
+              tLArmX = -0.45 + Math.sin(time * 3.0) * 0.06;
+              tLArmY = 0.25;
+              tLArmZ = -0.80;
+              tRArmX = -0.45 + Math.cos(time * 3.0) * 0.06;
+              tRArmY = -0.25;
+              tRArmZ = 0.80;
+              tLLowY = 0.45; tRLowY = -0.45;
+              tLHandX = -0.15; tRHandX = -0.15;
+              armSpeed = 9.0;
+            } else {
+              currentVrm.scene.position.y = groundLevelY;
+              const gesticulateY = Math.sin(time * 3.2) * 0.14;
+              const gesticulateZ = Math.cos(time * 2.8) * 0.10;
+              tRArmX = -0.38 + gesticulateY;
+              tRArmY = -0.20;
+              tRArmZ = 0.72 + gesticulateZ;
+              tRLowY = -0.75 + Math.sin(time * 3.2) * 0.22;
+
+              const wristLag = time * 3.2 - 0.45;
+              tRHandX = Math.sin(wristLag) * 0.08;
+              tRHandY = -Math.cos(wristLag) * 0.10;
+              tRHandZ = -Math.sin(wristLag) * 0.15;
+
+              tLArmX = -0.10 + Math.sin(time * 2.0) * 0.06;
+              tLArmY = 0.12;
+              tLArmZ = -1.15 + Math.sin(time * 1.6) * 0.04;
+              tLLowY = 0.25;
+              tLHandZ = 0.08 + Math.sin(time * 1.6) * 0.03;
+              armSpeed = 8.0;
+            }
+          } else if (currentEmotion === 'angry') {
+            currentVrm.scene.position.y = groundLevelY;
+            if (headNode) headNode.rotation.z = Math.sin(time * 2.2) * 0.04 - 0.10;
+            tLArmX = -0.4; tLArmY = 0.45; tLArmZ = -0.9;
+            tRArmX = -0.4; tRArmY = -0.45; tRArmZ = 0.9;
+            tLLowY = 1.3; tRLowY = -1.3;
+            tLHandZ = -0.12; tRHandZ = 0.12;
+          } else if (currentEmotion === 'happy') {
+            currentVrm.scene.position.y = groundLevelY + Math.abs(Math.sin(time * 2.5)) * 0.008;
+            tLArmZ = -1.15 + Math.sin(time * 1.6) * 0.03;
+            tRArmX = -0.30; tRArmY = -0.15; tRArmZ = 0.85;
+            tRLowY = -0.45;
+            tRHandZ = Math.sin(time * 4.0) * 0.12;
+            tLHandZ = 0.08;
+          } else {
+            currentVrm.scene.position.y = groundLevelY;
+            const stanceCycle = Math.floor(time / 14.0) % 3;
+
+            if (stanceCycle === 0) {
+              tLArmX = -0.12 + Math.sin(time * 0.8) * 0.03;
+              tLArmY = 0.08;
+              tLArmZ = -1.18 + breathCycle * 0.02;
+              tRArmX = -0.12 + Math.cos(time * 0.8) * 0.03;
+              tRArmY = -0.08;
+              tRArmZ = 1.18 - breathCycle * 0.02;
+              tLLowY = 0.30;
+              tRLowY = -0.30;
+              tLHandX = 0.04; tLHandY = 0.05; tLHandZ = 0.08;
+              tRHandX = 0.04; tRHandY = -0.05; tRHandZ = -0.08;
+            } else if (stanceCycle === 1) {
+              tLArmX = -0.22; tLArmY = 0.15; tLArmZ = -1.05;
+              tRArmX = -0.22; tRArmY = -0.15; tRArmZ = 1.05;
+              tLLowY = 0.65 + breathCycle * 0.03;
+              tRLowY = -0.65 - breathCycle * 0.03;
+              tLHandZ = 0.15; tRHandZ = -0.15;
+            } else {
+              tLArmX = -0.28; tLArmY = 0.20; tLArmZ = -0.95;
+              tLLowY = 0.90;
+              tLHandZ = 0.12;
+
+              tRArmX = -0.08; tRArmY = -0.05; tRArmZ = 1.20 - breathCycle * 0.02;
+              tRLowY = -0.25;
+              tRHandZ = -0.08;
+            }
+            armSpeed = 5.0;
+          }
+
+          // ── 5. Procedural Locomotion State Machine (Walk, Sit, Dance, Stretch, Spin, Idle) ──
+          if (locomotionState === 'walk') {
+            walkPhase += delta * 4.2;
+            const legL = Math.sin(walkPhase);
+            const legR = -legL;
+
+            tLLegX = legL * 0.42;
+            tRLegX = legR * 0.42;
+            tLLegY = 0.04; tRLegY = -0.04;
+            tLKneeX = Math.max(0, -legL) * 0.75;
+            tRKneeX = Math.max(0, -legR) * 0.75;
+            tLFootX = legL * 0.18;
+            tRFootX = legR * 0.18;
+
+            currentVrm.scene.position.y = groundLevelY + Math.abs(Math.sin(walkPhase)) * 0.022;
+            if (hips) hips.rotation.z = Math.sin(walkPhase) * 0.035;
+
+            tLArmX = -legR * 0.35;
+            tRArmX = -legL * 0.35;
+            tLArmZ = -1.15; tRArmZ = 1.15;
+            tLLowY = 0.30; tRLowY = -0.30;
+            armSpeed = 9.0;
+            legSpeed = 10.0;
+
+            const maxWalkX = screenHalfWidth - 0.50;
+            const minWalkX = -screenHalfWidth + 0.50;
+            currentVrm.scene.position.x += walkDirection * delta * 0.20;
+            if (currentVrm.scene.position.x >= maxWalkX) {
+              walkDirection = -1;
+            } else if (currentVrm.scene.position.x <= minWalkX) {
+              walkDirection = 1;
+            }
+            targetIdleX = currentVrm.scene.position.x;
+            const targetRotY = (walkDirection > 0 ? 0.38 : -0.38);
+            currentVrm.scene.rotation.y += (targetRotY - currentVrm.scene.rotation.y) * (1.0 - Math.exp(-6.0 * delta));
+          } else if (locomotionState === 'sit') {
+            tLLegX = 1.45; tRLegX = 1.45;
+            tLLegZ = 0.08; tRLegZ = -0.08;
+            tLKneeX = -1.48; tRKneeX = -1.48;
+            tLFootX = 0.15; tRFootX = 0.15;
+
+            currentVrm.scene.position.y += ((groundLevelY - 0.38) - currentVrm.scene.position.y) * (1.0 - Math.exp(-5.0 * delta));
+            currentVrm.scene.rotation.y += (0 - currentVrm.scene.rotation.y) * (1.0 - Math.exp(-6.0 * delta));
+            tLArmX = -0.50; tLArmY = 0.15; tLArmZ = -1.0;
+            tRArmX = -0.50; tRArmY = -0.15; tRArmZ = 1.0;
+            tLLowY = 0.55; tRLowY = -0.55;
+            armSpeed = 6.0;
+            legSpeed = 6.0;
+          } else if (locomotionState === 'dance') {
+            locomotionTimer -= delta;
+            if (locomotionTimer <= 0) locomotionState = 'idle';
+
+            currentVrm.scene.position.x = Math.sin(time * 3.2) * 0.12;
+            currentVrm.scene.position.y = groundLevelY + Math.abs(Math.sin(time * 6.4)) * 0.024;
+            if (hips) hips.rotation.z = Math.sin(time * 3.2) * 0.06;
+            if (headNode) headNode.rotation.z = Math.cos(time * 3.2) * 0.08;
+
+            tLLegX = Math.sin(time * 3.2) * 0.18;
+            tRLegX = -Math.sin(time * 3.2) * 0.18;
+            tLKneeX = Math.max(0, -Math.sin(time * 3.2)) * 0.35;
+            tRKneeX = Math.max(0, Math.sin(time * 3.2)) * 0.35;
+
+            tLArmZ = -1.60 + Math.sin(time * 3.2) * 0.35;
+            tRArmZ = 1.60 - Math.sin(time * 3.2) * 0.35;
+            tLArmX = -0.30; tRArmX = -0.30;
+            tLLowY = 0.65; tRLowY = -0.65;
+            armSpeed = 10.0;
+            legSpeed = 10.0;
+          } else if (locomotionState === 'stretch') {
+            locomotionTimer -= delta;
+            if (locomotionTimer <= 0) locomotionState = 'idle';
+
+            tLArmZ = -2.70; tRArmZ = 2.70;
+            tLArmX = -0.10; tRArmX = -0.10;
+            tLLowY = 0.20; tRLowY = -0.20;
+
+            if (spine) {
+              spine.rotation.x = 0.02;
+              spine.rotation.z = Math.sin(time * 2.2) * 0.035;
+            }
+            if (neck) {
+              neck.rotation.x = 0.03;
+              neck.rotation.y = 0;
+            }
+            if (headNode) {
+              headNode.rotation.x = 0.03;
+              headNode.rotation.y = 0;
+              headNode.rotation.z = Math.sin(time * 2.2) * 0.025;
+            }
+            currentVrm.scene.position.y = groundLevelY + 0.015;
+            armSpeed = 4.5;
+          } else if (locomotionState === 'spin') {
+            spinAngle += delta * 6.5;
+            currentVrm.scene.rotation.y = spinAngle;
+            tLArmZ = -0.85; tRArmZ = 0.85;
+            tLArmX = -0.15; tRArmX = -0.15;
+            tLLowY = 0.35; tRLowY = -0.35;
+            if (spinAngle >= Math.PI * 2) {
+              currentVrm.scene.rotation.y = 0;
+              locomotionState = 'idle';
+            }
+          } else {
+            currentVrm.scene.position.x += (targetIdleX - currentVrm.scene.position.x) * (1.0 - Math.exp(-4.0 * delta));
+            currentVrm.scene.position.y += (groundLevelY - currentVrm.scene.position.y) * (1.0 - Math.exp(-5.0 * delta));
+            currentVrm.scene.rotation.y += (0 - currentVrm.scene.rotation.y) * (1.0 - Math.exp(-5.0 * delta));
+
+            idleLocomotionTimer += delta;
+            if (idleLocomotionTimer > 150.0 && !isSpeaking) {
+              idleLocomotionTimer = 0;
+              if (Math.random() > 0.5) {
+                triggerLocomotionAction('stretch');
+              } else {
+                triggerLocomotionAction('walk');
+                setTimeout(() => { if (locomotionState === 'walk') triggerLocomotionAction('idle'); }, 9000);
+              }
+            }
+          }
+
+          // Apply smooth exponential damping to legs, knees and feet
+          smoothDampEuler(leftUpperLeg, tLLegX, tLLegY, tLLegZ, legSpeed, delta);
+          smoothDampEuler(rightUpperLeg, tRLegX, tRLegY, tRLegZ, legSpeed, delta);
+          if (leftLowerLeg) smoothDampEuler(leftLowerLeg, tLKneeX, tLKneeY, tLKneeZ, legSpeed, delta);
+          if (rightLowerLeg) smoothDampEuler(rightLowerLeg, tRKneeX, tRKneeY, tRKneeZ, legSpeed, delta);
+          if (leftFoot) smoothDampEuler(leftFoot, tLFootX, tLFootY, tLFootZ, legSpeed, delta);
+          if (rightFoot) smoothDampEuler(rightFoot, tRFootX, tRFootY, tRFootZ, legSpeed, delta);
+
+          // Apply smooth exponential damping to arms and wrists
+          smoothDampEuler(leftArm, tLArmX, tLArmY, tLArmZ, armSpeed, delta);
+          smoothDampEuler(rightArm, tRArmX, tRArmY, tRArmZ, armSpeed, delta);
+          if (leftLowerArm) smoothDampEuler(leftLowerArm, 0, tLLowY, 0, armSpeed, delta);
+          if (rightLowerArm) smoothDampEuler(rightLowerArm, 0, tRLowY, 0, armSpeed, delta);
+          if (leftHand) smoothDampEuler(leftHand, tLHandX, tLHandY, tLHandZ, armSpeed, delta);
+          if (rightHand) smoothDampEuler(rightHand, tRHandX, tRHandY, tRHandZ, armSpeed, delta);
+
+          // Update all finger joints (resting curl cascade, emotional splay, speech flutter)
+          updateFingerPoses(delta, time, isSpeaking, phonemes.level, currentEmotion, touchState);
         }
-
-        // Apply smooth exponential damping to legs, knees and feet
-        smoothDampEuler(leftUpperLeg, tLLegX, tLLegY, tLLegZ, legSpeed, delta);
-        smoothDampEuler(rightUpperLeg, tRLegX, tRLegY, tRLegZ, legSpeed, delta);
-        if (leftLowerLeg) smoothDampEuler(leftLowerLeg, tLKneeX, tLKneeY, tLKneeZ, legSpeed, delta);
-        if (rightLowerLeg) smoothDampEuler(rightLowerLeg, tRKneeX, tRKneeY, tRKneeZ, legSpeed, delta);
-        if (leftFoot) smoothDampEuler(leftFoot, tLFootX, tLFootY, tLFootZ, legSpeed, delta);
-        if (rightFoot) smoothDampEuler(rightFoot, tRFootX, tRFootY, tRFootZ, legSpeed, delta);
-
-        // Apply smooth exponential damping to arms and wrists
-        smoothDampEuler(leftArm, tLArmX, tLArmY, tLArmZ, armSpeed, delta);
-        smoothDampEuler(rightArm, tRArmX, tRArmY, tRArmZ, armSpeed, delta);
-        if (leftLowerArm) smoothDampEuler(leftLowerArm, 0, tLLowY, 0, armSpeed, delta);
-        if (rightLowerArm) smoothDampEuler(rightLowerArm, 0, tRLowY, 0, armSpeed, delta);
-        if (leftHand) smoothDampEuler(leftHand, tLHandX, tLHandY, tLHandZ, armSpeed, delta);
-        if (rightHand) smoothDampEuler(rightHand, tRHandX, tRHandY, tRHandZ, armSpeed, delta);
-
-        // Update all finger joints (resting curl cascade, emotional splay, speech flutter)
-        updateFingerPoses(delta, time, isSpeaking, phonemes.level, currentEmotion, touchState);
 
         // ── 5. Viseme Blendshapes & Micro-Expressions ──
         const expr = currentVrm.expressionManager;
@@ -1397,7 +1546,7 @@
           expr.setValue('ee', phonemes.ee);
           expr.setValue('ou', phonemes.ou);
 
-          // Touch & Emotion transitions
+          // Touch & Deterministic Intensity-Scaled Emotion transitions
           if (touchState === 'headpat') {
             expr.setValue('happy', 0.95);
             expr.setValue('relaxed', 0.85);
@@ -1410,25 +1559,11 @@
             expr.setValue('happy', 0.85);
             expr.setValue('blink', 0.45);
           } else {
-            // Apply blendshape weights for all standard and compound dynamic emotions
-            knownEmotions.forEach((e) => {
-              let target = (e === currentEmotion) ? 0.85 : 0.0;
-              // Handle compound VRM expressions for new dynamic emotions
-              if (currentEmotion === 'jealous') {
-                if (e === 'angry') target = 0.65;
-                if (e === 'sad') target = 0.35;
-              } else if (currentEmotion === 'flustered') {
-                if (e === 'surprised') target = 0.50;
-                if (e === 'happy') target = 0.70;
-              } else if (currentEmotion === 'smug') {
-                if (e === 'relaxed') target = 0.85;
-                if (e === 'happy') target = 0.40;
-              } else if (currentEmotion === 'caring') {
-                if (e === 'relaxed') target = 0.70;
-                if (e === 'happy') target = 0.50;
-              }
-              emotionWeights[e] += (target - emotionWeights[e]) * 0.12;
-              try { expr.setValue(e, emotionWeights[e]); } catch {}
+            const targetWeights = computeBlendshapeTargets(currentEmotion, currentIntensity);
+            blendshapePresets.forEach((preset) => {
+              const target = targetWeights[preset] ?? 0.0;
+              emotionWeights[preset] += (target - emotionWeights[preset]) * 0.12;
+              try { expr.setValue(preset, emotionWeights[preset]); } catch {}
             });
           }
 
@@ -1460,6 +1595,7 @@
           }
         }
 
+        vfxController?.update(delta);
         currentVrm.update(delta);
       }
 

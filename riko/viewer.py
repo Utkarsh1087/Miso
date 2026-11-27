@@ -10,7 +10,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import sounddevice as sd
 import soundfile as sf
 
-from riko import tts
+from riko import tags, tts
 from riko.config import ROOT
 
 HOST, PORT = "127.0.0.1", 8080
@@ -66,7 +66,7 @@ class _Handler(SimpleHTTPRequestHandler):
         try:
             item = _clips.get_nowait()
         except queue.Empty:
-            item = {"audio": None, "emotion": "neutral"}
+            item = {"audio": None, "emotion": "neutral", "intensity": 1, "gesture": None, "vfx": None, "text": ""}
         self._send(json.dumps(item).encode(), "application/json")
 
     def do_POST(self):
@@ -89,10 +89,15 @@ class _Handler(SimpleHTTPRequestHandler):
                     from riko import llm, config
                     cfg = config.load_config()
                     raw_reply = llm.reply(user_msg, cfg)
-                    import re
-                    m = re.match(r"^\[([a-zA-Z]+)\]\s*", raw_reply)
-                    clean_reply = raw_reply[m.end():] if m else raw_reply
-                    return self._send(json.dumps({"reply": clean_reply, "raw": raw_reply}).encode(), "application/json")
+                    parsed = tags.parse_reply_tags(raw_reply)
+                    return self._send(json.dumps({
+                        "reply": parsed.clean_text,
+                        "raw": raw_reply,
+                        "emotion": parsed.emotion,
+                        "intensity": parsed.intensity,
+                        "gesture": parsed.gesture,
+                        "vfx": parsed.vfx,
+                    }).encode(), "application/json")
             except Exception as e:
                 return self._send(json.dumps({"error": str(e)}).encode(), "application/json")
         self._send(b"{}", "application/json")
@@ -157,9 +162,18 @@ def trigger_action(action_name: str):
     print(f"[viewer] Triggered avatar action: {action_name}")
 
 
-def play(wav_path, emotion="neutral"):
+def play(wav_path, emotion="neutral", intensity=None, gesture=None, text="", vfx=None):
     """Play voice on the avatar page or speakers."""
     global _is_speaking
+    norm_emo = tags.normalize_emotion(emotion)
+    resolved_intensity = tags.clamp_intensity(
+        intensity if intensity is not None else (1 if norm_emo == "neutral" else tags.DEFAULT_INTENSITY)
+    )
+    visual = tags.emotion_to_visual_state(norm_emo, resolved_intensity)
+    resolved_emotion = visual["emotion"]
+    resolved_gesture = tags.normalize_gesture(gesture)
+    resolved_vfx = vfx if vfx is not None else visual["vfx"]
+
     duration = sf.info(wav_path).duration
     _is_speaking = True
     try:
@@ -167,7 +181,11 @@ def play(wav_path, emotion="neutral"):
             _finished.clear()
             _clips.put({
                 "audio": f"audio/{wav_path.name}?v={time.time()}",
-                "emotion": emotion
+                "emotion": resolved_emotion,
+                "intensity": resolved_intensity,
+                "gesture": resolved_gesture,
+                "vfx": resolved_vfx,
+                "text": text or "",
             })
             if not _finished.wait(timeout=duration + 1.2):
                 print(f"[viewer] playback finished (auto-synced)")
@@ -180,11 +198,94 @@ def play(wav_path, emotion="neutral"):
         _is_speaking = False
 
 
-def play_sentences(sentences, emotion="neutral", cfg=None):
+def play_streaming_sentences(sentences, cfg=None, emotion="neutral", intensity=None, gesture=None, vfx=None):
+    """Low-latency streaming: synthesizes and queues sentences as they arrive."""
+    global _is_speaking
+    _is_speaking = True
+    total_dur = 0.0
+    try:
+        _finished.clear()
+        idx = 0
+        for item in sentences:
+            if not _is_speaking:
+                # Interrupted / barge-in
+                break
+            if isinstance(item, dict):
+                s_text = item.get("text", "")
+                s_emo = item.get("emotion", emotion)
+                s_int = item.get("intensity", intensity)
+                s_ges = item.get("gesture", gesture)
+                s_vfx = item.get("vfx", vfx)
+            elif hasattr(item, "text"):
+                s_text = getattr(item, "text", "")
+                s_emo = getattr(item, "emotion", emotion)
+                s_int = getattr(item, "intensity", intensity)
+                s_ges = getattr(item, "gesture", gesture)
+                s_vfx = getattr(item, "vfx", vfx)
+            else:
+                s_text = str(item)
+                s_emo = emotion
+                s_int = intensity
+                s_ges = gesture
+                s_vfx = vfx
+
+            if not s_text or not s_text.strip():
+                continue
+
+            norm_emo = tags.normalize_emotion(s_emo)
+            resolved_intensity = tags.clamp_intensity(
+                s_int if s_int is not None else (1 if norm_emo == "neutral" else tags.DEFAULT_INTENSITY)
+            )
+            visual = tags.emotion_to_visual_state(norm_emo, resolved_intensity)
+            resolved_emotion = visual["emotion"]
+            resolved_gesture = tags.normalize_gesture(s_ges) if idx == 0 else None
+            resolved_vfx = s_vfx if s_vfx is not None else visual["vfx"]
+
+            fname = f"stream_{int(time.time() * 1000) % 100000}_{idx}.wav"
+            p = tts.speak(s_text, cfg, filename=fname)
+            dur = sf.info(p).duration
+            total_dur += dur
+
+            if not _is_speaking:
+                break
+
+            if time.monotonic() - _page_last_seen < 5:
+                _clips.put({
+                    "audio": f"audio/{fname}?v={time.time()}",
+                    "emotion": resolved_emotion,
+                    "intensity": resolved_intensity,
+                    "gesture": resolved_gesture,
+                    "vfx": resolved_vfx,
+                    "text": s_text,
+                })
+            else:
+                data, sr = sf.read(p)
+                sd.play(data, sr)
+                sd.wait()
+            idx += 1
+
+        # Wait until the web client finishes playing all queued sentences
+        if time.monotonic() - _page_last_seen < 5 and total_dur > 0 and _is_speaking:
+            if not _finished.wait(timeout=total_dur + 5.0):
+                print("[viewer] multi-sentence streaming playback finished (auto-synced)")
+    finally:
+        _is_speaking = False
+
+
+def play_sentences(sentences, emotion="neutral", cfg=None, intensity=None, gesture=None, vfx=None):
     """Low-latency streaming: synthesizes and queues sentences one after another."""
     global _is_speaking
     if not sentences:
         return
+    norm_emo = tags.normalize_emotion(emotion)
+    resolved_intensity = tags.clamp_intensity(
+        intensity if intensity is not None else (1 if norm_emo == "neutral" else tags.DEFAULT_INTENSITY)
+    )
+    visual = tags.emotion_to_visual_state(norm_emo, resolved_intensity)
+    resolved_emotion = visual["emotion"]
+    resolved_gesture = tags.normalize_gesture(gesture)
+    resolved_vfx = vfx if vfx is not None else visual["vfx"]
+
     _is_speaking = True
     total_dur = 0.0
     try:
@@ -198,7 +299,11 @@ def play_sentences(sentences, emotion="neutral", cfg=None):
                 if time.monotonic() - _page_last_seen < 5:
                     _clips.put({
                         "audio": f"audio/{fname}?v={time.time()}",
-                        "emotion": emotion
+                        "emotion": resolved_emotion,
+                        "intensity": resolved_intensity,
+                        "gesture": resolved_gesture if idx == 0 else None,
+                        "vfx": resolved_vfx,
+                        "text": s,
                     })
                 else:
                     data, sr = sf.read(p)

@@ -9,7 +9,7 @@ import threading
 import time
 from typing import List, Optional
 
-from riko import tts, viewer
+from riko import tags, tts, viewer
 from riko.config import ROOT
 
 ALARMS_FILE = ROOT / "alarms.json"
@@ -133,10 +133,11 @@ def _ring_relentlessly(label: str, cfg: dict):
     idx = 0
     while _active_alarm_ringing:
         try:
-            text = roasts[idx % len(roasts)]
+            raw_text = roasts[idx % len(roasts)]
             idx += 1
-            wav = tts.speak(text, cfg, filename="alarm_ring.wav")
-            viewer.play(wav, emotion="angry")
+            parsed = tags.parse_reply_tags(raw_text, default_emotion="angry")
+            wav = tts.speak(parsed.clean_text, cfg, filename="alarm_ring.wav")
+            viewer.play(wav, emotion=parsed.emotion, intensity=parsed.intensity, gesture=parsed.gesture, text=parsed.clean_text)
             # Wait briefly between alarm reminders
             for _ in range(35):
                 if not _active_alarm_ringing:

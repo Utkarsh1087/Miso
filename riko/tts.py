@@ -14,6 +14,92 @@ VOICE_DIR = ROOT / "client" / "audio"
 VOICE_FILE = VOICE_DIR / "riko.wav"
 
 
+class SentenceSegmenter:
+    """Incremental streaming sentence segmenter for TTS."""
+
+    def __init__(self):
+        self.buffer = ""
+
+    def feed(self, chunk: str) -> list[str]:
+        if not chunk:
+            return []
+        self.buffer += chunk
+        return self._extract(flush=False)
+
+    def push(self, chunk: str) -> list[str]:
+        return self.feed(chunk)
+
+    def flush(self) -> list[str]:
+        return self._extract(flush=True)
+
+    def finish(self) -> list[str]:
+        return self.flush()
+
+    def _extract(self, flush: bool = False) -> list[str]:
+        emitted = []
+        buf = self.buffer
+        i = 0
+        last_start = 0
+        bracket_depth = 0
+
+        # Abbreviations: Mr. Mrs. Ms. Dr. Prof. Sr. Jr. vs. etc. e.g. i.e. v1. $3. Item 1.
+        ABBR_RE = re.compile(r"(?i)\b(mr|mrs|ms|dr|prof|sr|jr|vs|etc|e\.g|i\.e|v\d+|\$\d+)\.$")
+        DIGIT_DOT_RE = re.compile(r"(?:^|\s)(?:item\s+)?\d+\.$", re.IGNORECASE)
+
+        while i < len(buf):
+            ch = buf[i]
+            if ch == "[":
+                bracket_depth += 1
+            elif ch == "]":
+                bracket_depth = max(0, bracket_depth - 1)
+
+            if bracket_depth == 0:
+                is_end = False
+                end_pos = i + 1
+
+                if ch in ("。", "！", "？", "।"):
+                    if i + 1 == len(buf):
+                        if flush:
+                            is_end = True
+                    else:
+                        is_end = True
+                elif ch in (".", "!", "?"):
+                    while end_pos < len(buf) and buf[end_pos] in (".", "!", "?"):
+                        end_pos += 1
+
+                    if end_pos < len(buf):
+                        if buf[end_pos] in (" ", "\t", "\n", "\r"):
+                            candidate = buf[last_start:end_pos].strip()
+                            if not ABBR_RE.search(candidate) and not DIGIT_DOT_RE.search(candidate):
+                                is_end = True
+                    elif flush:
+                        is_end = True
+                elif ch == "\n":
+                    is_end = True
+
+                if is_end:
+                    s = buf[last_start:end_pos].strip()
+                    if s:
+                        emitted.append(s)
+                    i = end_pos
+                    while i < len(buf) and buf[i] in (" ", "\t", "\n", "\r"):
+                        i += 1
+                    last_start = i
+                    continue
+
+            i += 1
+
+        if flush:
+            rem = buf[last_start:].strip()
+            if rem:
+                emitted.append(rem)
+            self.buffer = ""
+        else:
+            self.buffer = buf[last_start:]
+
+        return emitted
+
+
 def check(cfg):
     if cfg["tts"] == "fish":
         need_key("FISH_API_KEY", "tts: fish")
@@ -35,6 +121,8 @@ def clean_for_speech(text: str) -> str:
     t = text.replace("’", "'").replace("‘", "'")
     t = t.replace("“", '"').replace("”", '"')
     t = t.replace("—", ", ").replace("–", ", ").replace("…", "...")
+    # Normalize semicolons and colons to periods for clean spoken pacing without pitch inflection
+    t = t.replace(";", ". ").replace(":", ". ")
     # Remove any bracketed emotion / delta tags like [happy], [neutral], [caring, +2 care], [smug: 35]
     t = re.sub(r"\[[^\]]+\]", "", t).strip()
     # Strip forced anime filler noises that distort vocal register
@@ -51,6 +139,8 @@ def clean_for_speech(text: str) -> str:
     t = re.sub(r"\.{2,}", ", ", t)
     # CRITICAL: Strip ALL tildes (~, ～, 〜) so Fish Audio speaks naturally without singing pitch glides / vowel drag
     t = re.sub(r"[~～〜]+", "", t)
+    # Prevent dragged out vowels that induce melodic singing (e.g. soooo -> so, pleaaase -> please)
+    t = re.sub(r"([a-zA-Z])\1{2,}", r"\1", t)
     # Collapse repetitive character spam (e.g. "......" -> "...")
     t = re.sub(r"(.)\1{3,}", r"\1\1", t)
     # Collapse repeating word spam (e.g. "la la la la la la" -> "la la")
@@ -120,12 +210,16 @@ def _fish(text, f):
     body = {
         "text": text,
         "format": "wav",
-        "latency": "balanced"
+        "latency": "balanced",
+        "temperature": float(f.get("temperature", 0.2)),
+        "top_p": float(f.get("top_p", 0.7)),
+        "repetition_penalty": float(f.get("repetition_penalty", 1.2)),
+        "normalize": bool(f.get("normalize", True))
     }
     if f.get("voice_id"):
         body["reference_id"] = f["voice_id"]
     
-    speed = float(f.get("speed", 0.88))
+    speed = float(f.get("speed", 1.0))
     body["prosody"] = {"speed": speed}
     
     headers = {

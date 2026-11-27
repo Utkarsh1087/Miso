@@ -5,7 +5,7 @@ import datetime
 import threading
 import time
 
-from riko import llm, tts, viewer
+from riko import llm, tags, tts, viewer
 
 _last_interaction = time.time()
 _is_running = False
@@ -67,7 +67,6 @@ def start(cfg):
                 try:
                     mark_interaction()
                     import random
-                    import re
                     from riko import tools
 
                     # Rayen's Riko observation: alternating between screen observation and playful check-ins
@@ -81,20 +80,10 @@ def start(cfg):
                         prompt = "[Proactive Check-in: Senpai has been working quietly or has been idle for a while without speaking. Proactively initiate a casual, caring, or snarky check-in with senpai in 1 short sentence!]"
                         raw_answer = llm.reply(prompt, cfg)
 
-                    # Extract emotion tag
-                    emotion = "happy"
-                    match = re.match(r"^\[([a-zA-Z]+)\]\s*", raw_answer)
-                    if match:
-                        tag = match.group(1).lower()
-                        if tag in ["happy", "angry", "sad", "surprised", "relaxed", "neutral"]:
-                            emotion = tag
-                        clean_answer = raw_answer[match.end():]
-                    else:
-                        clean_answer = raw_answer
-
-                    print(f"[{emotion.upper()}] Miso (proactive observation): {clean_answer}")
-                    wav = tts.speak(clean_answer, cfg)
-                    viewer.play(wav, emotion=emotion)
+                    parsed = tags.parse_reply_tags(raw_answer, default_emotion="happy")
+                    print(f"[{parsed.emotion.upper()}:{parsed.intensity}] Miso (proactive observation): {parsed.clean_text}")
+                    wav = tts.speak(parsed.clean_text, cfg)
+                    viewer.play(wav, emotion=parsed.emotion, intensity=parsed.intensity, gesture=parsed.gesture, text=parsed.clean_text)
                 except Exception as e:
                     print(f"[heartbeat note] {e}")
 

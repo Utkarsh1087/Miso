@@ -10,7 +10,7 @@ from typing import Optional
 
 from PIL import Image, ImageChops
 
-from riko import tts, viewer
+from riko import tags, tts, viewer
 
 _cowatch_thread: Optional[threading.Thread] = None
 _cowatch_active = False
@@ -95,7 +95,7 @@ def _react_to_screen(full_img: Image.Image, cfg: dict):
         prompt = (
             "You are Riko, an anime girl sitting with senpai and co-watching whatever is on his screen right now (anime, movie, or YouTube video). "
             "React spontaneously to what is happening on screen in 1 punchy, funny, teasing, or excited sentence! "
-            "Start with an emotion tag like [happy], [surprised], or [angry]!"
+            "Start with [emotion:intensity] like [happy:2], [surprised:2], or [angry:2] and optional [gesture]!"
         )
 
         groq_key = os.getenv("GROQ_API_KEY")
@@ -133,14 +133,10 @@ def _react_to_screen(full_img: Image.Image, cfg: dict):
             reply = res.choices[0].message.content.strip()
 
         if reply:
-            import re
-            m = re.match(r"^\[([a-zA-Z]+)\]\s*", reply)
-            emotion = m.group(1).lower() if m else "surprised"
-            clean_text = reply[m.end():] if m else reply
-
-            print(f"[cowatch] Riko: {clean_text} [{emotion}]")
-            wav = tts.speak(clean_text, cfg, filename="cowatch_reaction.wav")
-            viewer.play(wav, emotion=emotion)
+            parsed = tags.parse_reply_tags(reply, default_emotion="surprised")
+            print(f"[cowatch] Riko: {parsed.clean_text} [{parsed.emotion}:{parsed.intensity}]")
+            wav = tts.speak(parsed.clean_text, cfg, filename="cowatch_reaction.wav")
+            viewer.play(wav, emotion=parsed.emotion, intensity=parsed.intensity, gesture=parsed.gesture, text=parsed.clean_text)
     except Exception as e:
         print(f"[cowatch error] {e}")
 

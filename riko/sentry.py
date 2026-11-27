@@ -10,7 +10,7 @@ from typing import Optional
 import cv2
 import numpy as np
 
-from riko import tts, viewer
+from riko import tags, tts, viewer
 
 _sentry_thread: Optional[threading.Thread] = None
 _sentry_active = False
@@ -137,18 +137,18 @@ def _analyze_and_alert(image_b64: str, cfg: dict, person_status: str = ""):
             prompt = (
                 "You are Miso, an arrogant, sharp-witted anime desktop companion. "
                 "You just noticed your creator (Utkarsh) return to his desk! "
-                "Welcome him back in 1 short, deadpan, witty sentence with zero tildes or forced giggles. Start with [relaxed] or [happy]!"
+                "Welcome him back in 1 short, deadpan, witty sentence with zero tildes or forced giggles. Start with [relaxed:2] or [happy:2]!"
             )
         elif "stranger_detected" in person_status:
             prompt = (
                 "You are Miso, an AI guarding Utkarsh's computer. "
                 "An UNFAMILIAR STRANGER just approached the desk! "
-                "Sound a sharp, witty warning in 1 short punchy sentence telling them to step away from senpai's PC. Start with [angry] or [surprised]!"
+                "Sound a sharp, witty warning in 1 short punchy sentence telling them to step away from senpai's PC. Start with [angry:2] or [surprised:2]!"
             )
         else:
             prompt = (
                 "You are Miso, an arrogant, sharp-witted anime desktop companion. "
-                "You just caught motion on the camera in the room. Give a witty, deadpan 1-sentence observation on whatever is happening without tildes or robotic fillers. Start with [surprised], [happy], or [neutral]!"
+                "You just caught motion on the camera in the room. Give a witty, deadpan 1-sentence observation on whatever is happening without tildes or robotic fillers. Start with [surprised:2], [happy:2], or [neutral:1]!"
             )
 
         reply_text = ""
@@ -183,18 +183,10 @@ def _analyze_and_alert(image_b64: str, cfg: dict, person_status: str = ""):
             reply_text = res.choices[0].message.content.strip()
 
         if reply_text:
-            import re
-            emotion = "surprised"
-            m = re.match(r"^\[([a-zA-Z]+)\]\s*", reply_text)
-            if m:
-                emotion = m.group(1).lower()
-                clean_text = reply_text[m.end():]
-            else:
-                clean_text = reply_text
-
-            print(f"[sentry alert] Miso: {clean_text} [{emotion}]")
-            wav = tts.speak(clean_text, cfg, filename="sentry_alert.wav")
-            viewer.play(wav, emotion=emotion)
+            parsed = tags.parse_reply_tags(reply_text, default_emotion="surprised")
+            print(f"[sentry alert] Miso: {parsed.clean_text} [{parsed.emotion}:{parsed.intensity}]")
+            wav = tts.speak(parsed.clean_text, cfg, filename="sentry_alert.wav")
+            viewer.play(wav, emotion=parsed.emotion, intensity=parsed.intensity, gesture=parsed.gesture, text=parsed.clean_text)
     except Exception as e:
         print(f"[sentry alert error] {e}")
 

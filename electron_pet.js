@@ -1,4 +1,7 @@
 // Auto-detect and heal if running under Node or if ELECTRON_RUN_AS_NODE was inherited from VS Code / IDE
+process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
+process.env.ELECTRON_ENABLE_LOGGING = 'false';
+
 const electron = require('electron');
 if (typeof electron === 'string' || !electron.app) {
   const { spawn } = require('child_process');
@@ -6,7 +9,7 @@ if (typeof electron === 'string' || !electron.app) {
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
   const extraArgs = process.argv.slice(2).filter(arg => !arg.includes('electron_pet'));
-  const child = spawn(electronExe, [__filename, ...extraArgs], {
+  const child = spawn(electronExe, ['--log-level=3', __filename, ...extraArgs], {
     env,
     stdio: 'inherit',
     windowsHide: false
@@ -23,6 +26,15 @@ const { spawn } = require('child_process');
 // Ensure hardware transparency visuals for Windows DWM
 app.commandLine.appendSwitch('enable-transparent-visuals');
 app.commandLine.appendSwitch('disable-gpu-vsync');
+// Prevent Chromium background networking / telemetry SSL handshake failures (net_error -101)
+app.commandLine.appendSwitch('disable-background-networking');
+app.commandLine.appendSwitch('disable-component-update');
+app.commandLine.appendSwitch('disable-domain-reliability');
+app.commandLine.appendSwitch('disable-sync');
+app.commandLine.appendSwitch('no-network-profile-lookup');
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion,InterestFeedContentSuggestions,OptimizationHints,MediaRouter');
+// Suppress internal Chromium network and SSL handshake warnings from terminal output
+app.commandLine.appendSwitch('log-level', '3');
 
 let mainWindow = null;
 let setupWindow = null;

@@ -14,7 +14,7 @@ from typing import Optional
 import cv2
 import numpy as np
 
-from riko import memory, tts, viewer
+from riko import memory, tags, tts, viewer
 
 _observer_thread: Optional[threading.Thread] = None
 _is_active = False
@@ -220,16 +220,13 @@ def _evaluate_visual_event(image_b64: str, cfg: dict, speech_cooldown: float, au
             return
 
         # Parse emotion and spoken remark
-        speak_match = re.search(r"\[SPEAK:\s*([a-zA-Z]+)\]\s*(.+)", action, re.IGNORECASE)
+        speak_match = re.search(r"\[SPEAK:\s*([a-zA-Z0-9_:-]+)\]\s*(.+)", action, re.IGNORECASE)
         if speak_match:
-            emotion = speak_match.group(1).lower()
-            allowed = ["happy", "angry", "sad", "surprised", "relaxed", "neutral"]
-            if emotion not in allowed:
-                emotion = "relaxed"
-            comment = speak_match.group(2).strip()
-
-            # Sanitize any tildes or fillers
-            comment = comment.replace("~", "").strip()
+            raw_tag = speak_match.group(1)
+            raw_comment = speak_match.group(2).strip()
+            parsed = tags.parse_reply_tags(f"[{raw_tag}] {raw_comment}", default_emotion="relaxed")
+            emotion = parsed.emotion
+            comment = tags.strip_reply_tags(parsed.clean_text).replace("~", "").strip()
             if not comment:
                 return
 
@@ -238,9 +235,9 @@ def _evaluate_visual_event(image_b64: str, cfg: dict, speech_cooldown: float, au
                 return
 
             _last_spoken_time = now
-            print(f"\nRiko (visual observation): [{emotion.upper()}] {comment}\n", flush=True)
+            print(f"\nRiko (visual observation): [{emotion.upper()}:{parsed.intensity}] {comment}\n", flush=True)
             wav = tts.speak(comment, cfg)
-            viewer.play(wav, emotion=emotion)
+            viewer.play(wav, emotion=emotion, intensity=parsed.intensity, gesture=parsed.gesture, text=comment)
             heartbeat.mark_interaction()
 
     except Exception as e:
