@@ -150,6 +150,10 @@ def clean_for_speech(text: str) -> str:
     t = re.sub(r"^[,\s]+", "", t)
     t = re.sub(r",\s*,+", ",", t)
     t = re.sub(r",\s*([.!?])", r"\1", t)
+    # Strip any dangling commas, colons, or dashes at the end that leave TTS hanging in mid-sentence
+    t = re.sub(r"[,;:\s\-]+$", "", t).strip()
+    if t and t[-1] not in ".!?":
+        t += "."
     t = re.sub(r"\s+", " ", t).strip()
     # Length guard: prevents runaway TTS requests (>280 chars)
     if len(t) > 280:
@@ -174,15 +178,16 @@ def speak(text, cfg, filename="riko.wav"):
     audio = _fish(clean_text, cfg["fish"]) if cfg["tts"] == "fish" else _sovits(clean_text, cfg["sovits"])
     data, sample_rate = sf.read(io.BytesIO(audio))
 
-    # Smooth tail pad (120ms): prevents harsh audio cutoff clicks at the end of speech
-    pad_samples = int(sample_rate * 0.12)
-    fade_len = min(int(sample_rate * 0.04), len(data))
-    if fade_len > 0:
-        fade = np.linspace(1.0, 0.0, fade_len, dtype=data.dtype)
+    # Smooth tail pad (350ms): ensures the final word, consonant release, and natural room decay resonate cleanly
+    pad_samples = int(sample_rate * 0.35)
+    # Micro anti-pop ramp (3ms) at very start of audio only
+    lead_fade = min(int(sample_rate * 0.003), len(data))
+    if lead_fade > 0:
+        fade_in = np.linspace(0.0, 1.0, lead_fade, dtype=data.dtype)
         if data.ndim == 1:
-            data[-fade_len:] *= fade
+            data[:lead_fade] *= fade_in
         else:
-            data[-fade_len:, :] *= fade[:, None]
+            data[:lead_fade, :] *= fade_in[:, None]
     silence = np.zeros((pad_samples,) if data.ndim == 1 else (pad_samples, data.shape[1]), dtype=data.dtype)
     data = np.concatenate([data, silence])
 
