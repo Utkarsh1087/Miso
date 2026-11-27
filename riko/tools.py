@@ -91,6 +91,29 @@ def control_media(text: str) -> Optional[str]:
                 print(f"[tools] screenshot save note: {e}")
                 return "attempted to save screenshot"
 
+        # Close active browser tab or application window
+        if any(w in t for w in ["close tab", "close the tab", "close this tab", "close browser tab"]):
+            # Hardware Ctrl+W via ctypes (zero external dependencies)
+            VK_CONTROL = 0x11
+            VK_W = 0x57
+            send_vk(0xB2)  # Stop media playback first
+            ctypes.windll.user32.keybd_event(VK_CONTROL, 0, 0, 0)
+            ctypes.windll.user32.keybd_event(VK_W, 0, 0, 0)
+            ctypes.windll.user32.keybd_event(VK_W, 0, 2, 0)
+            ctypes.windll.user32.keybd_event(VK_CONTROL, 0, 2, 0)
+            return "closed the active browser tab"
+
+        if any(w in t for w in ["close window", "close the window", "close this window", "close app"]):
+            # Hardware Alt+F4 via ctypes
+            VK_MENU = 0x12  # Alt
+            VK_F4 = 0x73
+            send_vk(0xB2)  # Stop media playback first
+            ctypes.windll.user32.keybd_event(VK_MENU, 0, 0, 0)
+            ctypes.windll.user32.keybd_event(VK_F4, 0, 0, 0)
+            ctypes.windll.user32.keybd_event(VK_F4, 0, 2, 0)
+            ctypes.windll.user32.keybd_event(VK_MENU, 0, 2, 0)
+            return "closed the active window"
+
         # Media playback: Stop / Pause / Resume (strictly require full command phrase or standalone command)
         is_pause_or_stop = (
             t in ["stop", "pause", "resume", "shut up", "be quiet", "silence"] or
@@ -99,8 +122,7 @@ def control_media(text: str) -> Optional[str]:
                 "stop song", "stop playing", "stop playback", "stop it", "stop that",
                 "pause the music", "pause music", "pause the video", "pause video",
                 "pause song", "pause it", "pause playback", "resume music", "resume playback",
-                "close video", "close the video", "close tab", "close the tab",
-                "kill the music", "kill music"
+                "close video", "close the video", "kill the music", "kill music"
             ])
         )
         if is_pause_or_stop:
@@ -108,14 +130,14 @@ def control_media(text: str) -> Optional[str]:
             send_vk(0xB2)  # VK_MEDIA_STOP
             send_vk(0xB3)  # VK_MEDIA_PLAY_PAUSE
 
-            # Target active YouTube / browser tab directly
+            # Target active YouTube / browser tab if win32com is present
             try:
                 import win32com.client
                 wsh = win32com.client.Dispatch("WScript.Shell")
                 if wsh.AppActivate("YouTube"):
                     import time
                     time.sleep(0.04)
-                    if any(w in t for w in ["close tab", "close the tab", "close video", "stop video", "stop the video"]):
+                    if any(w in t for w in ["close video", "stop video", "stop the video"]):
                         wsh.SendKeys("^w")  # Ctrl+W closes active tab
                     else:
                         wsh.SendKeys("k")   # 'k' is universal YouTube pause/play
@@ -123,10 +145,10 @@ def control_media(text: str) -> Optional[str]:
                     import time
                     time.sleep(0.04)
                     wsh.SendKeys(" ")       # Spacebar pauses Spotify
-            except Exception as e:
-                print(f"[media] app focus note: {e}")
+            except Exception:
+                pass
 
-            if any(w in t for w in ["close tab", "close the tab", "close video", "stop video"]):
+            if any(w in t for w in ["close video", "stop video"]):
                 return "closed the video tab"
             return "stopped the music and media playback"
 
@@ -284,7 +306,10 @@ def detect_and_play_music(text: str) -> Optional[str]:
                 if "youtube.com/watch" in href or "youtu.be" in href or "youtube.com/playlist" in href:
                     direct_url = href
                     if results[0].get("title"):
-                        label = results[0]["title"]
+                        raw_title = results[0]["title"]
+                        # Clean aggregated/concatenated title soup from DuckDuckGo
+                        clean_title = re.split(r"\s*-\s*YouTube\b|\s*\|\s*YouTube\b", raw_title, flags=re.IGNORECASE)[0].strip()
+                        label = clean_title if clean_title and len(clean_title) < 60 else label
     except Exception as e:
         print(f"[tools] direct youtube lookup note: {e}")
 

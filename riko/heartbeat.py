@@ -88,5 +88,4 @@ def start(cfg):
                     print(f"[heartbeat note] {e}")
 
     threading.Thread(target=loop, daemon=True).start()
-    print(f"[heartbeat] Proactive companion active (initiates check-in after {int(interval/60)} min of silence)")
 

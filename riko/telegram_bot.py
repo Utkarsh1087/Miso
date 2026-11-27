@@ -14,10 +14,8 @@ from riko import asr, llm, tags, tts
 def start_telegram_bridge(cfg: dict):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
-        print("[telegram] No TELEGRAM_BOT_TOKEN in .env. Mobile phone bridge disabled.")
         return
 
-    print("[telegram] Starting Mobile Phone Telegram Bridge...")
     threading.Thread(target=_telegram_loop, args=(token, cfg), daemon=True).start()
 
 

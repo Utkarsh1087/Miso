@@ -66,7 +66,6 @@ def start(cfg: dict):
     _is_active = True
     _observer_thread = threading.Thread(target=_observer_loop, args=(cfg,), daemon=True)
     _observer_thread.start()
-    print("[vision] Parallel Continuous Vision Observer active! Watching webcam silently...")
 
 
 def stop():
@@ -235,10 +234,14 @@ def _evaluate_visual_event(image_b64: str, cfg: dict, speech_cooldown: float, au
                 return
 
             _last_spoken_time = now
-            print(f"\nRiko (visual observation): [{emotion.upper()}:{parsed.intensity}] {comment}\n", flush=True)
-            wav = tts.speak(comment, cfg)
-            viewer.play(wav, emotion=emotion, intensity=parsed.intensity, gesture=parsed.gesture, text=comment)
-            heartbeat.mark_interaction()
+            heartbeat.set_busy(True)
+            try:
+                print(f"\nMiso (visual observation): [{emotion.upper()}:{parsed.intensity}] {comment}\n", flush=True)
+                wav = tts.speak(comment, cfg)
+                viewer.play(wav, emotion=emotion, intensity=parsed.intensity, gesture=parsed.gesture, text=comment)
+                heartbeat.mark_interaction()
+            finally:
+                heartbeat.set_busy(False)
 
     except Exception as e:
         print(f"[vision observer note] {e}")

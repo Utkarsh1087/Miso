@@ -29,13 +29,11 @@ def setup_global_hotkeys(on_inspect_screen=None, on_inspect_camera=None, on_insp
 
     try:
         keyboard.add_hotkey("ctrl+alt+r", trigger_screen)
-        print("[hotkeys] Registered global shortcut: Ctrl+Alt+R (Screen Vision)")
     except Exception:
         pass
 
     try:
         keyboard.add_hotkey("ctrl+alt+c", trigger_camera)
-        print("[hotkeys] Registered global shortcut: Ctrl+Alt+C (Webcam Camera Vision)")
     except Exception:
         pass
 

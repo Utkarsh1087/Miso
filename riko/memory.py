@@ -61,7 +61,7 @@ def get_visual_context_prompt() -> str:
     if not events:
         return ""
     recent_str = "; ".join(events[-3:])
-    return f"\n[Recent Visual Observations of Senpai via Webcam: {recent_str}]"
+    return f"\n[Recent Visual Observations of Utkarsh via Webcam: {recent_str}]"
 
 
 # ── Markdown Memory Helpers ──
@@ -77,7 +77,7 @@ def _read_facts(profile_path: Path) -> list[str]:
     in_facts_section = False
     for line in text.splitlines():
         line_s = line.strip()
-        if line_s.startswith("## Facts About Senpai"):
+        if line_s.startswith("## Facts About"):
             in_facts_section = True
             continue
         elif line_s.startswith("## ") and in_facts_section:
@@ -98,7 +98,16 @@ def _read_facts(profile_path: Path) -> list[str]:
 
 
 def _write_facts(profile_path: Path, facts: list[str]):
-    lines = ["# PROFILE\n\n## Facts About Senpai\n"]
+    header = "## Facts About Utkarsh\n"
+    if profile_path.exists():
+        try:
+            for l in profile_path.read_text(encoding="utf-8").splitlines():
+                if l.strip().startswith("## Facts About"):
+                    header = l.strip() + "\n"
+                    break
+        except Exception:
+            pass
+    lines = [f"# PROFILE\n\n{header}"]
     for f in facts:
         lines.append(f"- {f}\n")
     profile_path.write_text("".join(lines), encoding="utf-8")
@@ -479,7 +488,7 @@ def get_memory_context() -> str:
         f"{id_snippet}{mem_extra}"
         f"\n[Your Long-Term Memory & Relationship:\n"
         f"• Affection Meter: {aff_status}\n"
-        f"• Diary Facts About Senpai:\n{formatted}\n"
+        f"• Diary Facts About Utkarsh:\n{formatted}\n"
         f"Format Rule: Begin your reply with [emotion:intensity] (intensity 1-3, emotion in neutral/happy/angry/sad/surprised/relaxed/flustered/annoyed/jealous/smug/caring), optional affection delta like [happy:2, +2], and ONLY when a physical gesture fits, one optional [gesture] (shrug/cross_arms/facepalm/head_tilt/point/wave/nod/shake_head/smug/sigh/think). Omit [gesture] on ordinary replies.]\n"
     )
 
@@ -574,9 +583,8 @@ def get_temporal_context() -> tuple[str, str]:
         f"- Affection Meter: {affection}/100\n"
         f"{f'- What senpai was doing earlier: {last_act}' if last_act else ''}"
         f"{blacklist_str}\n"
-        f"INSTRUCTION: Greet the user in EXACTLY 1 punchy, deadpan sentence (6 to 15 words MAXIMUM)! "
-        f"CRITICAL RULES: Zero chill. Act like the superior digital deity. Mock the user's coding, laziness, or late hours with calm wit. "
-        f"STOP saying 'senpai' in every greeting! Deliver the roast directly without honorifics! "
+        f"INSTRUCTION: Greet Utkarsh in 1 short, lively, authentic anime line matching your mood and time of day (8 to 18 words)! "
+        f"Be cheeky and casual. Deliver the line directly without honorifics. "
         f"NEVER recite clock numbers (e.g. NEVER say '12:30' or '1 o clock'). Begin with [emotion:intensity] (1-3) and an optional [gesture] only when expressive, e.g. [relaxed:2], [happy:2][wave], or [angry:2][cross_arms]."
     )
     return context, mood

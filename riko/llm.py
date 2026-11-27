@@ -76,7 +76,7 @@ FUNCTION_TOOLS = [
                         "enum": [
                             "volume_up", "volume_down", "mute",
                             "pause_resume", "next_song", "previous_song",
-                            "lock_pc", "screenshot"
+                            "lock_pc", "screenshot", "close_tab", "close_window"
                         ],
                         "description": "The media or system control action to perform."
                     }
@@ -118,7 +118,7 @@ FUNCTION_TOOLS = [
 
 def execute_tool(tool_name: str, args_dict: dict) -> str:
     """Executes a function call requested by the LLM and returns the text result."""
-    print(f"[llm:tool] Executing {tool_name}({args_dict})...")
+    print(f"[action] {tool_name}: {args_dict}")
     if tool_name == "play_youtube":
         q = args_dict.get("query", "popular anime music")
         res = tools.detect_and_play_music(f"play {q} on youtube")
@@ -145,7 +145,9 @@ def execute_tool(tool_name: str, args_dict: dict) -> str:
             "next_song": "next song",
             "previous_song": "previous song",
             "lock_pc": "lock my pc",
-            "screenshot": "take a screenshot and save"
+            "screenshot": "take a screenshot and save",
+            "close_tab": "close tab",
+            "close_window": "close window"
         }
         res = tools.control_media(mapping.get(act, act))
         return f"Successfully {res or act} on senpai's PC."
@@ -166,17 +168,30 @@ def check(cfg):
     has_groq = bool(os.getenv("GROQ_API_KEY"))
     if not has_openai and not has_groq:
         sys.exit("[setup] Either OPENAI_API_KEY or GROQ_API_KEY is required in .env for the LLM.")
-    if has_groq and not has_openai:
-        model = os.getenv("GROQ_MODEL", cfg.get("groq_model", "openai/gpt-oss-120b"))
-        print(f"[setup] Using Groq (free tier, model: {model}, vision: qwen3.8-27b) with Hybrid Tools")
-    else:
-        print(f"[setup] OPENAI_API_KEY found (the LLM, model {cfg['model']}) with Hybrid Tools")
 
 
-def reply(user_text, cfg, image_b64=None, audio_bytes=None):
-    history_path = ROOT / cfg["history_file"]
+def reply(user_text, cfg, image_b64=None, audio_bytes=None, save_to_history=True):
+    # Auto-detect synthetic system instructions e.g. [Real-World Companion Event: ...] or [Temporal Context: ...]
+    if isinstance(user_text, str) and user_text.strip().startswith("["):
+        save_to_history = False
+
+    history_path = ROOT / cfg.get("history_file", "chat_history.json")
     history = json.loads(history_path.read_text(encoding="utf-8")) if history_path.exists() else []
-    history.append({"role": "user", "content": user_text})
+
+    # Clean any old synthetic system instructions from user role to keep in-context learning pristine
+    clean_history = [
+        m for m in history
+        if not (m.get("role") == "user" and isinstance(m.get("content"), str) and m.get("content", "").strip().startswith("["))
+    ]
+    if len(clean_history) != len(history):
+        history = clean_history
+        try:
+            history_path.write_text(json.dumps(history, indent=2, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            pass
+
+    if save_to_history:
+        history.append({"role": "user", "content": user_text})
 
     groq_key = os.getenv("GROQ_API_KEY")
     openai_key = os.getenv("OPENAI_API_KEY")
@@ -196,7 +211,7 @@ def reply(user_text, cfg, image_b64=None, audio_bytes=None):
     if not mem_action:
         media_action = tools.control_media(user_text)
         if media_action:
-            print(f"[media] {media_action.capitalize()} for senpai!")
+            print(f"[action] Media: {media_action}")
             media_context = f"\n[System Event: You just successfully {media_action} on senpai's computer. Playfully confirm it in 1 short sentence!]"
 
     music_vibe = None
@@ -204,7 +219,7 @@ def reply(user_text, cfg, image_b64=None, audio_bytes=None):
     if not mem_action and not media_action:
         music_vibe = tools.detect_and_play_music(user_text)
         if music_vibe:
-            print(f"[music] Playing {music_vibe} for senpai!")
+            print(f"[action] Music: {music_vibe}")
             music_context = f"\n[System Event: You just searched and started playing {music_vibe} on senpai's computer. Playfully confirm that you put it on for them in 1 short sentence!]"
 
     app_opened = None
@@ -212,7 +227,7 @@ def reply(user_text, cfg, image_b64=None, audio_bytes=None):
     if not mem_action and not media_action and not music_vibe:
         app_opened = tools.detect_and_open_app(user_text)
         if app_opened:
-            print(f"[app] Opened {app_opened} for senpai!")
+            print(f"[action] App: {app_opened}")
             app_context = f"\n[System Event: You just successfully opened '{app_opened}' on senpai's computer. Playfully confirm it in 1 short sentence!]"
 
     # Minigame check (Rock Paper Scissors, Coin Flip, Dice)
@@ -295,18 +310,18 @@ def reply(user_text, cfg, image_b64=None, audio_bytes=None):
     # Camera Vision request (webcam or direct image attachment)
     camera_b64 = image_b64
     if not camera_b64 and not mem_action and not media_action and not music_vibe and not app_opened and not game_result and not avatar_context and not voice_context and not sentry_context and not workout_context and not face_context and not voice_enroll_context and not alarm_context and not cowatch_context and not locomotion_context and tools.should_capture_camera(user_text):
-        print("[vision] Looking through webcam camera at senpai...")
+        print("[action] Checking camera...")
         camera_b64 = tools.capture_camera_base64()
 
     # Screen Vision request (desktop)
     screen_b64 = None
     if not mem_action and not media_action and not music_vibe and not app_opened and not game_result and not avatar_context and not voice_context and not sentry_context and not workout_context and not face_context and not voice_enroll_context and not alarm_context and not cowatch_context and not locomotion_context and not camera_b64 and tools.should_capture_screen(user_text):
-        print("[vision] Checking your screen...")
+        print("[action] Checking screen...")
         screen_b64 = tools.capture_screen_base64()
 
     search_context = ""
     if not mem_action and not media_action and not music_vibe and not app_opened and not game_result and not avatar_context and not voice_context and not sentry_context and not workout_context and not face_context and not voice_enroll_context and not alarm_context and not cowatch_context and not locomotion_context and not camera_b64 and not screen_b64 and tools.should_search_web(user_text):
-        print(f"[search] Searching web for: {user_text}...")
+        print(f"[action] Searching web: {user_text}...")
         search_results = tools.search_web(user_text)
         if search_results:
             search_context = f"\n[Live Web Results:\n{search_results}\nUse the above live information if relevant to answer accurately.]\n"
@@ -318,7 +333,11 @@ def reply(user_text, cfg, image_b64=None, audio_bytes=None):
     effective_system_prompt = cfg["system_prompt"] + memory.get_memory_context() + memory.get_visual_context_prompt()
 
     # Sliding window of recent messages
-    context_window = history[-MAX_HISTORY_TURNS:] if len(history) > MAX_HISTORY_TURNS else history
+    base_window = history[-MAX_HISTORY_TURNS:] if len(history) > MAX_HISTORY_TURNS else history
+    if save_to_history:
+        context_window = base_window
+    else:
+        context_window = [m.copy() for m in base_window] + [{"role": "user", "content": user_text}]
 
     use_groq = bool(groq_key and (not openai_key or cfg.get("llm_provider") == "groq"))
 
@@ -436,8 +455,8 @@ def reply(user_text, cfg, image_b64=None, audio_bytes=None):
                     tools=FUNCTION_TOOLS,
                     tool_choice="auto",
                     max_tokens=450,
-                    presence_penalty=0.35,
-                    frequency_penalty=0.25
+                    presence_penalty=0.40,
+                    frequency_penalty=0.55
                 )
                 msg = chat_completion.choices[0].message
                 answer = msg.content or "Done!"
@@ -446,8 +465,8 @@ def reply(user_text, cfg, image_b64=None, audio_bytes=None):
                     model=model_name,
                     messages=messages,
                     max_tokens=450,
-                    presence_penalty=0.35,
-                    frequency_penalty=0.25
+                    presence_penalty=0.40,
+                    frequency_penalty=0.55
                 )
                 answer = chat_completion.choices[0].message.content
         else:
@@ -488,8 +507,8 @@ def reply(user_text, cfg, image_b64=None, audio_bytes=None):
                     model=model_name,
                     messages=messages,
                     max_tokens=450,
-                    presence_penalty=0.35,
-                    frequency_penalty=0.25
+                    presence_penalty=0.40,
+                    frequency_penalty=0.55
                 )
                 msg = chat_completion.choices[0].message
 
@@ -509,8 +528,8 @@ def reply(user_text, cfg, image_b64=None, audio_bytes=None):
                     messages=messages,
                     tools=FUNCTION_TOOLS,
                     max_tokens=450,
-                    presence_penalty=0.35,
-                    frequency_penalty=0.25
+                    presence_penalty=0.40,
+                    frequency_penalty=0.55
                 )
                 answer = chat_completion_2.choices[0].message.content
             else:
@@ -526,8 +545,9 @@ def reply(user_text, cfg, image_b64=None, audio_bytes=None):
         fb_text, fb_emo = memory.get_conversational_fallback(user_text)
         answer = f"[{fb_emo}:2] {fb_text}"
 
-    history.append({"role": "assistant", "content": answer})
-    history_path.write_text(json.dumps(history, indent=2, ensure_ascii=False), encoding="utf-8")
+    if save_to_history:
+        history.append({"role": "assistant", "content": answer})
+        history_path.write_text(json.dumps(history, indent=2, ensure_ascii=False), encoding="utf-8")
     return answer
 
 
@@ -543,6 +563,13 @@ def reply_stream(user_text: str, cfg: dict, audio_bytes: bytes = None):
     if history_path.exists():
         try:
             history = json.loads(history_path.read_text(encoding="utf-8"))
+            clean_history = [
+                m for m in history
+                if not (m.get("role") == "user" and isinstance(m.get("content"), str) and m.get("content", "").strip().startswith("["))
+            ]
+            if len(clean_history) != len(history):
+                history = clean_history
+                history_path.write_text(json.dumps(history, indent=2, ensure_ascii=False), encoding="utf-8")
         except Exception:
             pass
 

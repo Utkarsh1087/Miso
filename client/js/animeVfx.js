@@ -142,7 +142,9 @@ export class AnimeVfxController {
       def.image;
     const baseTex = this._getTexture(imgFile);
     const tex = baseTex.clone();
-    tex.needsUpdate = true;
+    if (tex.image) {
+      tex.needsUpdate = true;
+    }
 
     const fb = def.flipbook;
     if (fb && fb.columns > 1 || fb && fb.rows > 1) {

@@ -987,7 +987,7 @@
       }
       statusEl.style.display = 'block';
       setTimeout(() => {
-        if (locomotionState === 'idle') statusEl.style.display = 'none';
+        statusEl.style.display = 'none';
       }, 2500);
     }
 
@@ -1487,27 +1487,43 @@
             legSpeed = 10.0;
           } else if (locomotionState === 'stretch') {
             locomotionTimer -= delta;
-            if (locomotionTimer <= 0) locomotionState = 'idle';
+            if (locomotionTimer <= 0) {
+              locomotionState = 'idle';
+              statusEl.style.display = 'none';
+            }
 
-            tLArmZ = -2.70; tRArmZ = 2.70;
-            tLArmX = -0.10; tRArmX = -0.10;
-            tLLowY = 0.20; tRLowY = -0.20;
+            // Smooth bell-curve progress (0 -> 1 -> 0) across the 4.5s stretch
+            const progress = Math.max(0, Math.min(1, 1.0 - (locomotionTimer / 4.5)));
+            const stretchPhase = Math.sin(progress * Math.PI);
+
+            // Natural upward stretch: arms lift gracefully up and outward, never crossing
+            tLArmZ = -1.20 + stretchPhase * 0.85;  // smoothly lifts from -1.20 up to -0.35
+            tRArmZ = 1.20 - stretchPhase * 0.85;   // smoothly lifts from +1.20 up to +0.35
+            tLArmX = -0.10 - stretchPhase * 0.25;
+            tRArmX = -0.10 - stretchPhase * 0.25;
+            tLArmY = 0.08 + stretchPhase * 0.12;
+            tRArmY = -0.08 - stretchPhase * 0.12;
+
+            tLLowY = 0.20 + stretchPhase * 0.30;
+            tRLowY = -0.20 - stretchPhase * 0.30;
+            tLHandZ = 0.08 + stretchPhase * 0.10;
+            tRHandZ = -0.08 - stretchPhase * 0.10;
 
             if (spine) {
-              spine.rotation.x = 0.02;
-              spine.rotation.z = Math.sin(time * 2.2) * 0.035;
+              spine.rotation.x = -0.05 * stretchPhase;
+              spine.rotation.z = Math.sin(time * 2.0) * 0.02;
             }
             if (neck) {
-              neck.rotation.x = 0.03;
+              neck.rotation.x = -0.06 * stretchPhase;
               neck.rotation.y = 0;
             }
             if (headNode) {
-              headNode.rotation.x = 0.03;
+              headNode.rotation.x = -0.08 * stretchPhase;
               headNode.rotation.y = 0;
-              headNode.rotation.z = Math.sin(time * 2.2) * 0.025;
+              headNode.rotation.z = Math.sin(time * 2.0) * 0.02;
             }
-            currentVrm.scene.position.y = groundLevelY + 0.015;
-            armSpeed = 4.5;
+            currentVrm.scene.position.y = groundLevelY + stretchPhase * 0.015;
+            armSpeed = 5.0;
           } else if (locomotionState === 'spin') {
             spinAngle += delta * 6.5;
             currentVrm.scene.rotation.y = spinAngle;

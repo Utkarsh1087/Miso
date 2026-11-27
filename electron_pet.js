@@ -56,13 +56,33 @@ function startBackendServer() {
 
   backendProcess = spawn(pythonCmd, args, {
     cwd: __dirname,
-    env: { ...process.env, PYTHONUNBUFFERED: '1' },
+    env: { ...process.env, PYTHONUNBUFFERED: '1', PYTHONIOENCODING: 'utf-8' },
     windowsHide: true
   });
 
   backendProcess.stdout.on('data', (data) => {
-    const text = data.toString().trim();
-    if (text) console.log(`[backend] ${text}`);
+    const lines = data.toString().split(/\r?\n/);
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      // Filter out internal debug logs
+      if (line.includes('[asr]') || line.includes('[tts]') || line.includes('[viewer]') || line.includes('[hands-free]')) {
+        continue;
+      }
+      // Clean display for conversation, tool actions, and companion status
+      if (
+        line.startsWith('You:') ||
+        line.startsWith('Miso:') ||
+        line.startsWith('Miso (startup):') ||
+        line.startsWith('[action]') ||
+        line.startsWith('===') ||
+        line.startsWith('•')
+      ) {
+        console.log(line);
+      } else {
+        console.log(`[backend] ${line}`);
+      }
+    }
   });
 
   backendProcess.stderr.on('data', (data) => {
@@ -319,9 +339,19 @@ function createMainWindow() {
   mainWindow.webContents.on('console-message', (event, ...args) => {
     const level = (event && typeof event.level === 'number') ? event.level : args[0];
     const message = (event && typeof event.message === 'string') ? event.message : args[1];
-    if (message && message.includes('Electron Security Warning')) return;
-    if (level >= 2) {
-      console.log(`[renderer] ${message}`);
+    if (!message) return;
+    if (message.includes('Electron Security Warning')) return;
+    // Suppress benign Three.js, VRM animation, and WebGL warnings
+    if (
+      message.includes('VRMLookAtQuaternionProxy') ||
+      message.includes('THREE.WebGLRenderer') ||
+      message.includes('THREE.PropertyBinding') ||
+      message.includes('Texture marked for update')
+    ) {
+      return;
+    }
+    if (level >= 3) {
+      console.log(`[renderer error] ${message}`);
     }
   });
 

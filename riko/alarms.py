@@ -91,7 +91,6 @@ def start(cfg: dict):
         return
     _alarm_thread = threading.Thread(target=_alarm_loop, args=(cfg,), daemon=True)
     _alarm_thread.start()
-    print("[alarms] Background Alarm Scheduler active.")
 
 
 def _alarm_loop(cfg: dict):

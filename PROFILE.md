@@ -1,4 +1,4 @@
 # PROFILE
 
-## Facts About Senpai
-- Senpai: my favorite character is tony stark and my name is Utkarsh
+## Facts About Utkarsh
+- Favorite character is Tony Stark, name is Utkarsh

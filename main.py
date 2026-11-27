@@ -9,6 +9,8 @@ Run:  uv run main.py                 (uses asr / tts from character_config.yaml)
 """
 import argparse
 import datetime
+import os
+import sys
 import threading
 import time
 
@@ -17,6 +19,12 @@ from riko.config import load_config
 
 
 def main():
+    if sys.platform == "win32":
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     parser = argparse.ArgumentParser(description="Talk to Riko.")
     parser.add_argument("--asr", choices=["local", "groq"], help="speech to text (overrides the config)")
     parser.add_argument("--tts", choices=["sovits", "fish"], help="her voice (overrides the config)")
@@ -30,7 +38,11 @@ def main():
         cfg["hands_free"] = True
 
     mode = "hands-free" if cfg.get("hands_free") else "push-to-talk"
-    print(f"\n=== Miso  |  model: {cfg['model']}  |  ears: {cfg['asr']} ({mode})  |  voice: {cfg['tts']} ===")
+    print(f"\n=== Miso Desktop Companion Active ===")
+    print(f"• Model: {cfg.get('groq_model', cfg.get('model', 'openai/gpt-oss-120b'))}  |  Ears: {cfg['asr']} ({mode})  |  Voice: {cfg['tts']}")
+    print(f"• Hotkeys: Ctrl+Alt+R (Screen Vision), Ctrl+Alt+C (Camera Vision)")
+    if os.getenv("TELEGRAM_BOT_TOKEN"):
+        print(f"• Telegram: Connected")
     llm.check(cfg)
     asr.check(cfg)
     tts.check(cfg)
@@ -39,12 +51,13 @@ def main():
     telegram_bot.start_telegram_bridge(cfg)
     alarms.start(cfg)
     vision_observer.start(cfg)
+    print(f"• Status: Ready & listening...\n", flush=True)
 
     # Setup global hotkeys: Ctrl+Alt+R (Screen Vision) and Ctrl+Alt+C (Camera Vision)
     def handle_hotkey_inspect():
         print("\n[hotkey] Ctrl+Alt+R pressed! Inspecting active screen...")
         try:
-            raw_answer = llm.reply("Look at my screen and give me your snarky reaction or advice in 1-2 sentences!", cfg)
+            raw_answer = llm.reply("Look at my screen and give me your snarky reaction or advice in 1-2 sentences!", cfg, save_to_history=False)
             parsed = tags.parse_reply_tags(raw_answer)
             emotion = parsed.emotion
             clean_answer = parsed.clean_text
@@ -56,7 +69,7 @@ def main():
     def handle_hotkey_camera():
         print("\n[hotkey] Ctrl+Alt+C pressed! Looking through webcam camera at senpai...")
         try:
-            raw_answer = llm.reply("Look at me through the camera and give me your snarky reaction in 1-2 sentences!", cfg)
+            raw_answer = llm.reply("Look at me through the camera and give me your snarky reaction in 1-2 sentences!", cfg, save_to_history=False)
             parsed = tags.parse_reply_tags(raw_answer)
             emotion = parsed.emotion
             clean_answer = parsed.clean_text
@@ -76,10 +89,10 @@ def main():
             temporal_ctx, mood = memory.get_temporal_context()
             prompt = (
                 f"[{temporal_ctx} "
-                f"Greet senpai in 1 short, lively, authentic sentence matching your mood and time of day! "
+                f"Greet Utkarsh in 1 short, lively, authentic sentence matching your mood and time of day! "
                 f"Do NOT repeat prior lines. Begin with [emotion:intensity] (1-3) and optional [gesture] e.g. [happy:2] or [relaxed:1].]"
             )
-            raw_answer = llm.reply(prompt, cfg)
+            raw_answer = llm.reply(prompt, cfg, save_to_history=False)
             parsed = tags.parse_reply_tags(raw_answer or "", default_emotion="happy")
             emotion = parsed.emotion
             intensity = parsed.intensity
@@ -104,8 +117,12 @@ def main():
             memory.update_session_active()
 
             print(f"\nMiso (startup): [{emotion.upper()}:{intensity}] {clean_answer}\n", flush=True)
-            wav_path = tts.speak(clean_answer, cfg)
-            viewer.play(wav_path, emotion=emotion, intensity=intensity, gesture=gesture, text=clean_answer)
+            sentences = tts.split_into_sentences(clean_answer)
+            if len(sentences) > 1 and (time.monotonic() - viewer._page_last_seen < 5):
+                viewer.play_sentences(sentences, emotion=emotion, cfg=cfg, intensity=intensity, gesture=gesture)
+            else:
+                wav_path = tts.speak(clean_answer, cfg)
+                viewer.play(wav_path, emotion=emotion, intensity=intensity, gesture=gesture, text=clean_answer)
         except Exception as e:
             pass
 
@@ -171,8 +188,12 @@ def main():
             print(f"Miso: [{emotion.upper()}:{intensity}] {clean_answer}\n", flush=True)
             memory.update_session_active()
 
-            wav_path = tts.speak(clean_answer, cfg)
-            viewer.play(wav_path, emotion=emotion, intensity=intensity, gesture=gesture, text=clean_answer)
+            sentences = tts.split_into_sentences(clean_answer)
+            if len(sentences) > 1 and (time.monotonic() - viewer._page_last_seen < 5):
+                viewer.play_sentences(sentences, emotion=emotion, cfg=cfg, intensity=intensity, gesture=gesture)
+            else:
+                wav_path = tts.speak(clean_answer, cfg)
+                viewer.play(wav_path, emotion=emotion, intensity=intensity, gesture=gesture, text=clean_answer)
             time.sleep(0.35)  # Acoustic room decay
             heartbeat.mark_interaction()
             heartbeat.set_busy(False)

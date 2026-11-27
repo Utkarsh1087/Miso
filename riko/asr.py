@@ -49,9 +49,7 @@ def check(cfg):
     global _whisper
     if cfg["asr"] == "groq":
         need_key("GROQ_API_KEY", "asr: groq")
-        print(f"[asr] using Groq cloud Whisper ({GROQ_MODEL}) — high accuracy & fast!")
     else:
-        print(f"[asr] loading Faster-Whisper {WHISPER_MODEL} on {WHISPER_DEVICE}...")
         _whisper = WhisperModel(WHISPER_MODEL, device=WHISPER_DEVICE, compute_type="int8")
 
 
@@ -80,7 +78,6 @@ def record_push_to_talk(cfg=None):
     if not chunks:
         return None
     audio = np.concatenate(chunks)
-    print(f"[asr] recorded {len(audio) / SAMPLE_RATE:.1f}s")
     wav = io.BytesIO()
     sf.write(wav, audio, SAMPLE_RATE, format="WAV")
     return wav.getvalue()
@@ -90,7 +87,6 @@ def record_vad(silence_duration=0.8, min_speech_duration=0.30, max_duration=10.0
     """Hands-free voice detection powered by WebRTC VAD and dynamic ambient noise calibration."""
     device_idx = find_input_device(cfg)
     dev_name = sd.query_devices(device_idx)['name'] if device_idx is not None else "Default Mic"
-    print(f"\n[hands-free] Listening via [{dev_name}]... (speak naturally, or Ctrl+C to cancel)")
     
     # 20ms frame = 320 samples at 16000Hz (exact standard frame for WebRTC VAD)
     frame_size = int(SAMPLE_RATE * 0.02)  # 320 samples
@@ -172,7 +168,6 @@ def record_vad(silence_duration=0.8, min_speech_duration=0.30, max_duration=10.0
             if user_is_speaking:
                 if not speaking:
                     speaking = True
-                    print("[hands-free] Hearing you speak...", flush=True)
                     if on_speech_start:
                         try:
                             on_speech_start()
@@ -203,7 +198,6 @@ def record_vad(silence_duration=0.8, min_speech_duration=0.30, max_duration=10.0
     if peak_val < 0.005:
         return None
 
-    print(f"[asr] recorded {duration:.1f}s", flush=True)
     wav = io.BytesIO()
     sf.write(wav, audio, SAMPLE_RATE, subtype="PCM_16", format="WAV")
     return wav.getvalue()
@@ -228,7 +222,6 @@ def record(cfg=None, on_speech_start=None):
 def transcribe(wav_bytes, cfg):
     if cfg["asr"] == "groq":
         filename = "voice.ogg" if wav_bytes.startswith(b"OggS") else "you.wav"
-        print("[asr] transcribing via Groq Whisper...", flush=True)
         groq = OpenAI(api_key=os.getenv("GROQ_API_KEY"), base_url="https://api.groq.com/openai/v1", timeout=10.0, max_retries=1)
         try:
             # Force target language decoding (defaults to 'en') to prevent language-detection drift
@@ -243,7 +236,6 @@ def transcribe(wav_bytes, cfg):
 
             resp = groq.audio.transcriptions.create(**req_kwargs)
             text = resp.text
-            print(f"[asr] Whisper recognized: '{text.strip()}'", flush=True)
         except Exception as e:
             print(f"[asr error] {e}", flush=True)
             return ""
@@ -263,13 +255,13 @@ def transcribe(wav_bytes, cfg):
     # Reject foreign CJK script hallucinations (Chinese, Japanese, Korean)
     # Riko communicates in English, Hindi, and Hinglish in Latin script
     if re.search(r"[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]", clean_text):
-        print(f"[asr] Ignored foreign script noise artifact: '{clean_text}'")
         return ""
 
     # Reject common Whisper hallucinations when audio contains silence/background noise
     for phrase in COMMON_HALLUCINATIONS:
-        if phrase in clean_lower or clean_lower == phrase:
-            print(f"[asr] Filtered hallucination: '{clean_text}'")
+        if clean_lower == phrase:
+            return ""
+        if len(phrase) > 3 and phrase in clean_lower:
             return ""
 
     return text.strip()

@@ -132,8 +132,6 @@ def start(cfg):
     except OSError:
         sys.exit(f"[setup] Port {PORT} is busy (is Riko already running?). Close it or change PORT in riko/viewer.py.")
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    print(f"[viewer] avatar: {cfg['vrm_model']}")
-    print(f"[viewer] avatar page: http://{HOST}:{PORT}")
 
 
 def stop_speech():
@@ -196,9 +194,8 @@ def play(wav_path, emotion="neutral", intensity=None, gesture=None, text="", vfx
                 "text": text or "",
             })
             if not _finished.wait(timeout=duration + 1.2):
-                print(f"[viewer] playback finished (auto-synced)")
+                pass
         else:
-            print("[viewer] no avatar page open, playing on speakers (open http://127.0.0.1:8080 and click once)")
             data, sample_rate = sf.read(wav_path)
             sd.play(data, sample_rate)
             sd.wait()
@@ -274,8 +271,7 @@ def play_streaming_sentences(sentences, cfg=None, emotion="neutral", intensity=N
 
         # Wait until the web client finishes playing all queued sentences
         if time.monotonic() - _page_last_seen < 5 and total_dur > 0 and _is_speaking:
-            if not _finished.wait(timeout=total_dur + 5.0):
-                print("[viewer] multi-sentence streaming playback finished (auto-synced)")
+            _finished.wait(timeout=total_dur + 5.0)
     finally:
         _is_speaking = False
 
@@ -322,7 +318,6 @@ def play_sentences(sentences, emotion="neutral", cfg=None, intensity=None, gestu
 
         # Wait until the web client finishes playing all queued sentences
         if time.monotonic() - _page_last_seen < 5 and total_dur > 0:
-            if not _finished.wait(timeout=total_dur + 2.5):
-                print("[viewer] multi-sentence playback finished (auto-synced)")
+            _finished.wait(timeout=total_dur + 2.5)
     finally:
         _is_speaking = False

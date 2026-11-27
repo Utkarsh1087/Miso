@@ -19,4 +19,3 @@ def need_key(name, why):
     """Stop at startup with a clear message if an API key is missing."""
     if not os.getenv(name):
         sys.exit(f"[setup] {name} is missing. Add it to .env (needed for {why}).")
-    print(f"[setup] {name} found ({why})")

@@ -165,11 +165,12 @@ def clean_for_speech(text: str) -> str:
 
 def split_into_sentences(text: str) -> list[str]:
     """Splits full response text into speakable sentence chunks for low-latency streaming."""
-    clean = clean_for_speech(text)
+    # Strip reply tags before splitting
+    raw_text = re.sub(r"\[[^\]]+\]", "", text).strip()
     # Split on sentence boundaries: periods, exclamation marks, question marks, newlines
-    raw_sentences = re.split(r"(?<=[.!?।\n])\s+", clean)
-    sentences = [s.strip() for s in raw_sentences if s.strip()]
-    return sentences or [clean]
+    raw_sentences = re.split(r"(?<=[.!?।\n])\s+", raw_text)
+    sentences = [clean_for_speech(s) for s in raw_sentences if s.strip()]
+    return [s for s in sentences if s and s != "..."] or [clean_for_speech(raw_text)]
 
 
 def speak(text, cfg, filename="riko.wav"):
@@ -194,8 +195,6 @@ def speak(text, cfg, filename="riko.wav"):
     VOICE_DIR.mkdir(parents=True, exist_ok=True)
     target_path = VOICE_DIR / filename
     sf.write(target_path, data, sample_rate)
-    duration = len(data) / sample_rate
-    print(f"[tts] {cfg['tts']}: {duration:.1f}s of audio ({filename})")
     return target_path
 
 
