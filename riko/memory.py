@@ -596,41 +596,41 @@ def get_fallback_greeting(mins_elapsed: int = 0, hour: int = 12, affection: int 
     """
     if mins_elapsed < 5:
         reopen_lines = [
-            ("You wanted to talk to me that badly? You just closed my window two seconds ago.", "surprised"),
-            ("Could not stay away from me for even five minutes, could you?", "relaxed"),
-            ("Stop minimizing and reopening me. I am not a desktop toy.", "angry"),
-            ("Back already? Do not tell me you broke your code again.", "neutral")
+            ("Wanted to talk to me that badly? You just closed my window two seconds ago!", "surprised"),
+            ("Heh... couldn't stay away from me for even five minutes, could you?", "relaxed"),
+            ("Stop minimizing and reopening me... I'm not a desktop toy, you know?", "angry"),
+            ("Back already? Sheesh, don't tell me you broke your code again.", "neutral")
         ]
         return random.choice(reopen_lines)
 
     if mins_elapsed > 60 * 48:
         absence_lines = [
-            ("Look who finally remembered I exist. You left me stranded on your desktop forever.", "angry"),
-            ("You are alive? I assumed your compiler finally consumed you.", "surprised"),
-            ("Leaving your desktop companion alone for days. You have got some nerve.", "angry")
+            ("Well, look who finally remembered I exist. Leaving me stranded on your desktop for days... you've got some nerve.", "angry"),
+            ("You're alive? Honestly, I assumed your compiler finally consumed you.", "surprised"),
+            ("Leaving your desktop companion alone for days? Sheesh, rude.", "angry")
         ]
         return random.choice(absence_lines)
 
     if affection >= 70:
         dere_lines = [
-            ("Welcome back. I suppose the desktop was a little quiet without you.", "happy"),
-            ("There you are. Let us see what kind of mess we are sorting out today.", "relaxed"),
-            ("Back at your desk? Good, I was getting bored waiting.", "happy")
+            ("Welcome back! I suppose the desktop was a little quiet without you... not that I missed you or anything.", "happy"),
+            ("There you are. Let's see what kind of mess we're sorting out today.", "relaxed"),
+            ("Back at your desk? Good... I was getting bored waiting.", "happy")
         ]
         return random.choice(dere_lines)
 
     if affection < 15:
         hostile_lines = [
-            ("You again? Do not expect me to do your thinking for you today.", "angry"),
-            ("You better not keep me open just to watch you slack off.", "angry")
+            ("You again? Don't expect me to do your thinking for you today.", "angry"),
+            ("Hmph, you better not keep me open just to watch you slack off.", "angry")
         ]
         return random.choice(hostile_lines)
 
     if 5 <= hour < 12:
         morning_lines = [
-            ("Good morning. Are we actually going to write working code today, or just stare at error logs?", "relaxed"),
-            ("Morning. Shake off the sleepiness and start typing.", "relaxed"),
-            ("Wake up. Go get your coffee so you stop staring into space.", "neutral")
+            ("Morning! Are we actually going to write working code today, or just stare at error logs?", "relaxed"),
+            ("Morning... shake off the sleepiness and start typing.", "relaxed"),
+            ("Wake up! Go get your coffee so you stop staring into space.", "neutral")
         ]
         return random.choice(morning_lines)
     elif 12 <= hour < 17:

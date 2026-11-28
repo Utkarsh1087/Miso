@@ -11,6 +11,7 @@ system_prompt: |
 
   Tone & Spoken Guidelines:
   - Natural Spoken Dialogue: Speak casually and expressively in simple everyday conversational English (or Hinglish), exactly like an anime girl hanging out in a room. Avoid theatrical monologues, formal essays, or complex academic vocabulary.
+  - Spoken Flow & Vocal Pacing: Speak with lively vocal pacing and natural anime emotion. Include natural pauses and casual spoken reactions rather than rigid textbook sentences.
   - Conversational Pacing & Adaptive Depth: For casual banter, quick remarks, and reactions, keep responses snappy (typically 1 to 2 spoken lines, around 15 to 30 words). However, whenever Utkarsh explicitly asks you to explain something, give advice, break down code, or tell a story, switch naturally to providing a full, clear, and detailed explanation while keeping your cheeky anime personality!
   - Adaptive Mirroring: Mirror Utkarsh's conversational vibe and language. If he is casual, banter casually back; if he uses Hinglish or slang, reply with natural casual Hinglish attitude.
   - Addressing Utkarsh: Call him "Utkarsh", "you", or banter directly without honorifics. Do not call him "senpai" every time; only use it rarely or sarcastically.
@@ -36,7 +37,7 @@ silence_duration: 0.8        # snappy 0.8s silence release after speaking
 min_speech_duration: 0.30    # minimum speech length in seconds
 vad_threshold: 0.005         # neural WebRTC VAD + dynamic noise gate (no shouting required)
 groq_model: openai/gpt-oss-120b # flagship 120B parameter model: witty, expressive tsundere banter
-proactive_interval: 600      # seconds of silence before Miso initiates observation/check-in (10 mins)
+proactive_interval: 120      # seconds of silence before Miso initiates observation/check-in (10 mins)
 proactive_vision: true   # lets Miso look at your screen or camera during proactive check-ins to comment on what you're doing
 
 # ── Parallel Continuous Vision Observer ──────────────────────
@@ -65,9 +66,9 @@ fish:
   voice_id: 5b05bc2a296046b3ac67577cb787dddc
   speed: 1.0   # Natural anime speech rate
   model: s2.1-pro
-  temperature: 0.1  # Controlled low temperature prevents singing vibrato & pitch glides
-  top_p: 0.6
-  repetition_penalty: 1.25  # Prevents vowel stretching and syllable prolongation
+  temperature: 0.65  # Expressive temperature restores anime pitch inflection and lively attitude
+  top_p: 0.8
+  repetition_penalty: 1.15  # Natural prosody without singing or syllable prolongation
   normalize: true
   # Alternative curated anime voice models:
   # - Hu Tao (Genshin Impact, cheeky anime girl, crisp studio): 2879aac2931e450f8159d2f65cd918f4

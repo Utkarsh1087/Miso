@@ -226,6 +226,8 @@ function createMainWindow() {
     hasShadow: false,
     resizable: false,
     skipTaskbar: true,
+    focusable: false,
+    type: 'toolbar',
     backgroundColor: '#00000000',
     webPreferences: {
       nodeIntegration: false,
@@ -237,9 +239,9 @@ function createMainWindow() {
   // Default to pass-through with mouse forwarding enabled so empty transparent space is 100% clickable
   mainWindow.setIgnoreMouseEvents(true, { forward: true });
 
-  // Keep pet visible across Windows virtual desktops
+  // Keep pet visible across Windows virtual desktops without stealing focus or switching desktops on click
   if (typeof mainWindow.setVisibleOnAllWorkspaces === 'function') {
-    mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
   }
 
   // Handle dynamic click-through switching from renderer

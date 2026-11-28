@@ -135,8 +135,8 @@ def clean_for_speech(text: str) -> str:
     t = re.sub(r"[♪♫♬♩]+", " ", t)
     # Prevent multi-hyphen stutter pitch artifacts (collapse W-W-Wait -> W-Wait)
     t = re.sub(r"\b([A-Za-z])-(?:[A-Za-z]-)+", r"\1-", t)
-    # Convert trailing dots that cause slow speech down to natural breath commas
-    t = re.sub(r"\.{2,}", ", ", t)
+    # Convert trailing dots to standard ellipsis for natural breath pause in Fish Audio
+    t = re.sub(r"\.{2,}", "... ", t)
     # CRITICAL: Strip ALL tildes (~, ～, 〜) so Fish Audio speaks naturally without singing pitch glides / vowel drag
     t = re.sub(r"[~～〜]+", "", t)
     # Prevent dragged out vowels that induce melodic singing (e.g. soooo -> so, pleaaase -> please)

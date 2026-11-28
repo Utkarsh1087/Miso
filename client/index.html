@@ -471,7 +471,8 @@
         const cameraDist = halfHeight / Math.tan(halfFovRad);
 
         // Ground level where feet rest directly on Windows taskbar (NDC -1.0)
-        groundLevelY = -halfHeight;
+        // Offset by -0.045m to anchor VRM shoe soles flush with the taskbar instead of hovering
+        groundLevelY = -halfHeight - 0.045;
         screenHalfWidth = halfHeight * camera.aspect;
 
         camera.position.set(0, 0, cameraDist);
@@ -534,6 +535,14 @@
       const mouseWorldX = ((e.clientX / window.innerWidth) - 0.5) * (screenHalfWidth * 2);
       const mouseWorldY = (1.0 - (e.clientY / window.innerHeight)) * visibleHeight;
       rawMouseTarget.set(mouseWorldX, mouseWorldY, 2.0);
+
+      // Detect cursor movement to naturally perk up Miso's curiosity
+      const moveDist = Math.hypot(e.clientX - lastMouseClientX, e.clientY - lastMouseClientY);
+      lastMouseClientX = e.clientX;
+      lastMouseClientY = e.clientY;
+      if (moveDist > 25) {
+        cursorActivityTimer = 3.5; // Stays attentive for 3.5s after cursor moves
+      }
 
       // Pixel-perfect hit-test: if cursor touches Riko's 3D body or UI/drag controls, enable mouse clicks.
       // If cursor is in empty transparent space, let all clicks pass through to VS Code / background apps.
@@ -949,6 +958,14 @@
     let isGlancingAway = false;
     const glanceTarget = new THREE.Vector3(0, 0, 0);
 
+    // ── Organic Head-Turning Attention State ("Not always, but sometimes") ──
+    let headAttentionTimer = 0;
+    let nextHeadAttentionDecision = 3.0;
+    let isHeadAttentive = true;
+    let currentHeadFollowWeight = 0.0;
+    let lastMouseClientX = 0, lastMouseClientY = 0;
+    let cursorActivityTimer = 0;
+
     const clock = new THREE.Clock();
     const emotionWeights = { neutral: 1, happy: 0, angry: 0, sad: 0, surprised: 0, relaxed: 0 };
 
@@ -1003,18 +1020,18 @@
     // ── Anatomical Hand & Finger Articulation System ──
     // Natural anatomical resting curl cascade (Index -> Little) + thumb opposability
     const fingerCascade = {
-      Thumb: 0.22,
-      Index: 0.25,
-      Middle: 0.32,
-      Ring: 0.38,
-      Little: 0.46
+      Thumb: 0.45,
+      Index: 0.55,
+      Middle: 0.65,
+      Ring: 0.68,
+      Little: 0.72
     };
 
     const segmentWeights = {
-      Metacarpal: 0.15,
-      Proximal: 0.55,
-      Intermediate: 0.35,
-      Distal: 0.20
+      Metacarpal: 0.18,
+      Proximal: 0.60,
+      Intermediate: 0.45,
+      Distal: 0.25
     };
 
     function updateFingerPoses(delta, time, isSpeaking, speechLevel, emotion, touch) {
@@ -1063,18 +1080,18 @@
           let targetY = 0;
           let targetZ = sign * totalCurl;
 
-          // Natural finger splay (abduction / adduction along Y-axis)
+          // Natural finger splay (abduction / adduction along Y-axis) - gentle feminine grouping
           if (finger === 'Index') {
-            targetY = (isLeft ? -0.04 : 0.04) * splayMult;
+            targetY = (isLeft ? -0.02 : 0.02) * splayMult;
           } else if (finger === 'Ring') {
-            targetY = (isLeft ? 0.03 : -0.03) * splayMult;
+            targetY = (isLeft ? 0.02 : -0.02) * splayMult;
           } else if (finger === 'Little') {
-            targetY = (isLeft ? 0.07 : -0.07) * splayMult;
+            targetY = (isLeft ? 0.04 : -0.04) * splayMult;
           } else if (finger === 'Thumb') {
-            // Thumb flexes diagonally across the palm (opposed)
-            targetZ = sign * (totalCurl * 0.75);
-            targetY = (isLeft ? 0.22 : -0.22) * splayMult;
-            targetX = 0.10;
+            // Thumb flexes gently inward towards palm
+            targetZ = sign * (totalCurl * 0.85);
+            targetY = (isLeft ? 0.18 : -0.18) * splayMult;
+            targetX = 0.08;
           }
 
           smoothDampEuler(node, targetX, targetY, targetZ, 12.0, delta);
@@ -1192,6 +1209,22 @@
             }
           }
 
+          // Natural feminine contrapposto leg softening during idle standing
+          if (locomotionState === 'idle') {
+            if (weightCycle > 0) {
+              // Weight shifts to right leg; left leg relaxes with subtle knee flexion
+              tLLegX = 0.03 * weightCycle;
+              tLKneeX = -0.06 * weightCycle;
+              tLFootX = 0.02 * weightCycle;
+            } else {
+              // Weight shifts to left leg; right leg relaxes
+              const absW = -weightCycle;
+              tRLegX = 0.03 * absW;
+              tRKneeX = -0.06 * absW;
+              tRFootX = 0.02 * absW;
+            }
+          }
+
           // Sinusoidal organic breathing across spine, chest and shoulders
           const breathCycle = Math.sin(time * 1.6);
 
@@ -1206,50 +1239,85 @@
             chest.rotation.x = Math.sin(time * 1.6 + 0.3) * 0.018;
             chest.rotation.y = Math.sin(time * 0.35) * 0.020;
           }
+          // ── Organic Head & Neck Cursor Tracking ("Not always, but sometimes") ──
+          headAttentionTimer += delta;
+          if (headAttentionTimer > nextHeadAttentionDecision) {
+            headAttentionTimer = 0;
+            nextHeadAttentionDecision = 2.5 + Math.random() * 3.5;
+            // ~60% of the time her head attends to your cursor; 40% only eyes track
+            isHeadAttentive = Math.random() < 0.60;
+          }
+          if (cursorActivityTimer > 0) {
+            cursorActivityTimer -= delta;
+            isHeadAttentive = true; // Cursor moved: perks up head to follow!
+          }
+
+          const targetFollowWeight = (isHeadAttentive && !isGlancingAway) ? 0.75 : 0.0;
+          currentHeadFollowWeight += (targetFollowWeight - currentHeadFollowWeight) * (1.0 - Math.exp(-3.5 * delta));
+
+          // Compute angle to gaze target relative to head position
+          const headWorldY = (currentVrm.scene.position.y || groundLevelY) + defaultHeadY;
+          const gdx = lookAtTarget.position.x - currentVrm.scene.position.x;
+          const gdy = lookAtTarget.position.y - headWorldY;
+          const gdz = Math.max(0.6, lookAtTarget.position.z - currentVrm.scene.position.z);
+
+          // Yaw (left / right) and Pitch (up / down)
+          const rawYaw = -Math.atan2(gdx, gdz);
+          const clampedYaw = Math.max(-0.45, Math.min(0.45, rawYaw)) * currentHeadFollowWeight;
+          const rawPitch = -Math.atan2(gdy, gdz);
+          const clampedPitch = Math.max(-0.25, Math.min(0.25, rawPitch)) * currentHeadFollowWeight;
+
+          // Shared head & neck rotation distribution
+          const targetNeckY = clampedYaw * 0.35;
+          const targetNeckX = clampedPitch * 0.35;
+          const targetHeadY = clampedYaw * 0.65;
+          const targetHeadX = clampedPitch * 0.65;
+          const targetHeadZ = clampedYaw * 0.08; // subtle cute head tilt
+
           if (neck) {
-            neck.rotation.x = -breathCycle * 0.010;
-            neck.rotation.y = 0;
+            neck.rotation.x = -breathCycle * 0.010 + targetNeckX;
+            neck.rotation.y = targetNeckY;
             neck.rotation.z = Math.sin(time * 0.5) * 0.020;
           }
           if (leftShoulder) leftShoulder.rotation.z = -breathCycle * 0.016;
           if (rightShoulder) rightShoulder.rotation.z = breathCycle * 0.016;
 
           // ── 4. Dynamic Emotional Gestures, Conversational Gesticulation & Articulation ──
-          let tLArmX = 0, tLArmY = 0, tLArmZ = -1.20 + breathCycle * 0.02;
-          let tRArmX = 0, tRArmY = 0, tRArmZ = 1.20 - breathCycle * 0.02;
-          let tLLowY = 0.20, tRLowY = -0.20;
-          let tLHandX = 0.02, tLHandY = 0.04, tLHandZ = 0.08;
-          let tRHandX = 0.02, tRHandY = -0.04, tRHandZ = -0.08;
+          let tLArmX = -0.06, tLArmY = 0.06, tLArmZ = -1.38 + breathCycle * 0.015;
+          let tRArmX = -0.06, tRArmY = -0.06, tRArmZ = 1.38 - breathCycle * 0.015;
+          let tLLowY = 0.12, tRLowY = -0.12;
+          let tLHandX = 0.02, tLHandY = 0.02, tLHandZ = -0.02;
+          let tRHandX = 0.02, tRHandY = -0.02, tRHandZ = 0.02;
           let armSpeed = 7.5;
 
-          // Head Orientations (subtle gestures, leaving gaze pointing to VRM lookAt)
+          // Head Orientations (subtle gestures + organic head tracking)
           if (headNode) {
             if (touchState === 'headpat') {
               headNode.rotation.x = -0.12;
-              headNode.rotation.y = 0;
+              headNode.rotation.y = targetHeadY * 0.2;
               headNode.rotation.z = Math.sin(time * 3.5) * 0.05;
             } else if (touchState === 'poke') {
               headNode.rotation.x = 0;
-              headNode.rotation.y = 0;
+              headNode.rotation.y = targetHeadY * 0.2;
               headNode.rotation.z = -0.16;
             } else if (isSpeaking) {
-              // Conversational nodding on phoneme level
-              headNode.rotation.x = -0.04 + Math.sin(time * 8.5) * (phonemes.level * 0.08);
-              headNode.rotation.y = 0;
-              headNode.rotation.z = (currentEmotion === 'angry') ? -0.08 + Math.sin(time * 3.5) * 0.04 : Math.sin(time * 2.8) * 0.025;
+              // Conversational nodding on phoneme level + cursor gaze
+              headNode.rotation.x = -0.04 + Math.sin(time * 8.5) * (phonemes.level * 0.08) + targetHeadX;
+              headNode.rotation.y = targetHeadY;
+              headNode.rotation.z = (currentEmotion === 'angry') ? -0.08 + Math.sin(time * 3.5) * 0.04 : Math.sin(time * 2.8) * 0.025 + targetHeadZ;
             } else if (currentEmotion === 'angry') {
-              headNode.rotation.x = 0;
-              headNode.rotation.y = 0;
-              headNode.rotation.z = Math.sin(time * 2.2) * 0.04 - 0.10;
+              headNode.rotation.x = targetHeadX;
+              headNode.rotation.y = targetHeadY;
+              headNode.rotation.z = Math.sin(time * 2.2) * 0.04 - 0.10 + targetHeadZ;
             } else if (currentEmotion === 'sad') {
-              headNode.rotation.x = 0.18;
-              headNode.rotation.y = 0;
-              headNode.rotation.z = 0;
+              headNode.rotation.x = 0.18 + targetHeadX * 0.4;
+              headNode.rotation.y = targetHeadY * 0.4;
+              headNode.rotation.z = targetHeadZ * 0.4;
             } else {
-              // Natural idle head breathing
-              headNode.rotation.x = -breathCycle * 0.005;
-              headNode.rotation.y = 0;
-              headNode.rotation.z = Math.sin(time * 0.45) * 0.035;
+              // Natural idle head breathing + cursor gaze
+              headNode.rotation.x = -breathCycle * 0.005 + targetHeadX;
+              headNode.rotation.y = targetHeadY;
+              headNode.rotation.z = Math.sin(time * 0.45) * 0.035 + targetHeadZ;
             }
           }
 
@@ -1389,32 +1457,37 @@
             const stanceCycle = Math.floor(time / 14.0) % 3;
 
             if (stanceCycle === 0) {
-              tLArmX = -0.12 + Math.sin(time * 0.8) * 0.03;
+              // Natural, relaxed feminine idle standing - arms hang naturally along outer thighs
+              tLArmX = -0.06 + Math.sin(time * 0.8) * 0.02;
               tLArmY = 0.08;
-              tLArmZ = -1.18 + breathCycle * 0.02;
-              tRArmX = -0.12 + Math.cos(time * 0.8) * 0.03;
+              tLArmZ = -1.38 + breathCycle * 0.015;
+              tRArmX = -0.06 + Math.cos(time * 0.8) * 0.02;
               tRArmY = -0.08;
-              tRArmZ = 1.18 - breathCycle * 0.02;
-              tLLowY = 0.30;
-              tRLowY = -0.30;
-              tLHandX = 0.04; tLHandY = 0.05; tLHandZ = 0.08;
-              tRHandX = 0.04; tRHandY = -0.05; tRHandZ = -0.08;
+              tRArmZ = 1.38 - breathCycle * 0.015;
+              tLLowY = 0.12;
+              tRLowY = -0.12;
+              tLHandX = 0.02; tLHandY = 0.02; tLHandZ = -0.02;
+              tRHandX = 0.02; tRHandY = -0.02; tRHandZ = 0.02;
             } else if (stanceCycle === 1) {
-              tLArmX = -0.22; tLArmY = 0.15; tLArmZ = -1.05;
-              tRArmX = -0.22; tRArmY = -0.15; tRArmZ = 1.05;
-              tLLowY = 0.65 + breathCycle * 0.03;
-              tRLowY = -0.65 - breathCycle * 0.03;
-              tLHandZ = 0.15; tRHandZ = -0.15;
-            } else {
-              tLArmX = -0.28; tLArmY = 0.20; tLArmZ = -0.95;
-              tLLowY = 0.90;
-              tLHandZ = 0.12;
+              // Gentle weight shift - left hand lightly resting forward near waist/hip, right arm hanging naturally
+              tLArmX = -0.14; tLArmY = 0.12; tLArmZ = -1.32;
+              tLLowY = 0.32 + breathCycle * 0.02;
+              tLHandX = 0.04; tLHandY = 0.02; tLHandZ = -0.04;
 
-              tRArmX = -0.08; tRArmY = -0.05; tRArmZ = 1.20 - breathCycle * 0.02;
-              tRLowY = -0.25;
-              tRHandZ = -0.08;
+              tRArmX = -0.06; tRArmY = -0.06; tRArmZ = 1.38 - breathCycle * 0.015;
+              tRLowY = -0.12;
+              tRHandX = 0.02; tRHandY = -0.02; tRHandZ = 0.02;
+            } else {
+              // Casual relaxed stance - arms softly close to torso with soft elbow bend
+              tLArmX = -0.08; tLArmY = 0.06; tLArmZ = -1.36;
+              tLLowY = 0.16;
+              tLHandZ = -0.02;
+
+              tRArmX = -0.12; tRArmY = -0.10; tRArmZ = 1.32 - breathCycle * 0.015;
+              tRLowY = -0.28;
+              tRHandZ = 0.04;
             }
-            armSpeed = 5.0;
+            armSpeed = 4.5;
           }
 
           // ── 5. Procedural Locomotion State Machine (Walk, Sit, Dance, Stretch, Spin, Idle) ──
@@ -1497,8 +1570,8 @@
             const stretchPhase = Math.sin(progress * Math.PI);
 
             // Natural upward stretch: arms lift gracefully up and outward, never crossing
-            tLArmZ = -1.20 + stretchPhase * 0.85;  // smoothly lifts from -1.20 up to -0.35
-            tRArmZ = 1.20 - stretchPhase * 0.85;   // smoothly lifts from +1.20 up to +0.35
+            tLArmZ = -1.38 + stretchPhase * 1.03;  // smoothly lifts from -1.38 up to -0.35
+            tRArmZ = 1.38 - stretchPhase * 1.03;   // smoothly lifts from +1.38 up to +0.35
             tLArmX = -0.10 - stretchPhase * 0.25;
             tRArmX = -0.10 - stretchPhase * 0.25;
             tLArmY = 0.08 + stretchPhase * 0.12;
